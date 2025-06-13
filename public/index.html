@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Las Cruzadas - Inicio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <h1>🔥 Las Cruzadas 🔥</h1>
+
+  <!-- Enlace a la sección de eventos -->
+  <div style="text-align: center; margin-bottom: 20px;">
+    <a href="/eventos" style="font-size: 1.2em; text-decoration: none; color: #007bff;">📅 Ver próximos eventos</a>
+  </div>
+
+  <div class="form-container">
+    <h2>Iniciar sesión</h2>
+    <form action="/login" method="POST" onsubmit="guardarNickname(this)">
+      <input type="text" name="nickname" id="login-nickname" placeholder="Apodo" required><br>
+      <input type="password" name="password" placeholder="Contraseña" required><br>
+      <button type="submit">Entrar</button>
+    </form>
+  </div>
+
+  <div class="form-container">
+    <h2>Registrarse</h2>
+    <form action="/register" method="POST" onsubmit="guardarNickname(this)">
+      <input type="text" name="nickname" id="register-nickname" placeholder="Nuevo apodo" required><br>
+      <input type="password" name="password" placeholder="Crear contraseña" required><br>
+      <button type="submit">Unirme</button>
+    </form>
+  </div>
+
+  <script>
+    function guardarNickname(form) {
+      const nickname = form.querySelector('input[name="nickname"]').value;
+      sessionStorage.setItem('nickname', nickname);
+    }
+  </script>
+
+</body>
+</html>
