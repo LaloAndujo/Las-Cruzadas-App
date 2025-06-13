@@ -36,14 +36,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Rutas
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
 app.post('/register', async (req, res) => {
   const { nickname, password } = req.body;
   const existing = await User.findOne({ nickname });
   if (existing) return res.send('Ese apodo ya está en uso. 🧱');
-  
+
   const user = new User({ nickname, password });
   await user.save();
   req.session.user = user;
@@ -54,44 +54,49 @@ app.post('/login', async (req, res) => {
   const { nickname, password } = req.body;
   const user = await User.findOne({ nickname, password });
   if (!user) return res.send('Datos incorrectos. 🚫');
-  
+
   req.session.user = user;
   res.redirect('/dashboard');
 });
 
+// Redirección segura a dashboard con sessionStorage para el frontend
 app.get('/dashboard', (req, res) => {
   if (!req.session.user) return res.redirect('/');
-  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+  const nickname = req.session.user.nickname;
+  res.send(`
+    <script>
+      sessionStorage.setItem('nickname', '${nickname}');
+      window.location.href = '/dashboard.html';
+    </script>
+  `);
 });
 
+// Publicar estado
 app.post('/post-status', async (req, res) => {
   if (!req.session.user) return res.redirect('/');
-
   const newPost = new Post({
     user: req.session.user.nickname,
     content: req.body.status
   });
-
   await newPost.save();
   res.redirect('/dashboard');
 });
 
+// Feed de publicaciones
 app.get('/api/feed', async (req, res) => {
   const posts = await Post.find().sort({ date: -1 }).limit(30);
   res.json(posts);
 });
 
+// Generador de QR único
 app.get('/api/generate-qr', async (req, res) => {
   const nickname = req.query.user || 'desconocido';
-  const qrData = `https://lascruzadas.com/perfil/${nickname}`; // puedes cambiar esta URL después
-  try {
-    const qrImage = await QRCode.toDataURL(qrData);
-    res.json({ qr: qrImage });
-  } catch (error) {
-    res.status(500).json({ error: 'Error al generar QR' });
-  }
+  const qrData = `https://lascruzadas.com/perfil/${nickname}`;
+  const qrImage = await QRCode.toDataURL(qrData);
+  res.json({ qr: qrImage });
 });
 
+// Logout
 app.get('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
