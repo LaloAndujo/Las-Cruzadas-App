@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Evento - Las Cruzadas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <h1 id="titulo-evento">Evento</h1>
+  <div class="box" id="info-evento">
+    <p>Cargando detalles...</p>
+  </div>
+
+  <div class="box">
+    <h3>¿Cómo quieres asistir?</h3>
+    <form action="/api/evento/asistencia" method="POST">
+      <input type="hidden" name="eventoId" id="eventoId">
+      <label><input type="radio" name="modo" value="pasajero" required> Pasajero</label><br>
+      <label><input type="radio" name="modo" value="conductor" required> Conductor</label><br><br>
+
+      <div id="datos-conductor" style="display: none;">
+        <input type="text" name="auto" placeholder="Marca y modelo del auto" required><br>
+        <input type="number" name="lugaresDisponibles" placeholder="¿Cuántos lugares?" required><br>
+        <input type="text" name="horaSalida" placeholder="Hora de salida" required><br>
+        <input type="text" name="puntoReunion" placeholder="Punto de reunión" required><br>
+      </div>
+
+      <button type="submit">Confirmar asistencia</button>
+    </form>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    document.getElementById('eventoId').value = id;
+
+    async function cargarEvento() {
+      const res = await fetch(`/api/events/${id}`);
+      const evento = await res.json();
+      document.getElementById('titulo-evento').textContent = evento.nombre;
+
+      const info = `
+        <p><strong>Fecha:</strong> ${new Date(evento.fecha).toLocaleString()}</p>
+        <p><strong>Lugar:</strong> ${evento.lugar}</p>
+        <p>${evento.descripcion}</p>
+      `;
+      document.getElementById('info-evento').innerHTML = info;
+    }
+
+    cargarEvento();
+
+    document.querySelectorAll('input[name="modo"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const datos = document.getElementById('datos-conductor');
+        if (radio.value === 'conductor') {
+          datos.style.display = 'block';
+        } else {
+          datos.style.display = 'none';
+        }
+      });
+    });
+  </script>
+
+</body>
+</html>
