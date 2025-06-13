@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const path = require('path');
 const session = require('express-session');
 const bodyParser = require('body-parser');
-const QRCode = require('qrcode'); // 👈 NUEVO: QR
+const QRCode = require('qrcode');
 require('dotenv').config();
 
 const app = express();
@@ -23,7 +23,7 @@ const User = mongoose.model('User', new mongoose.Schema({
   points: { type: Number, default: 0 }
 }));
 
-const Post = require('./models/Post'); // 👈 Modelo para publicaciones
+const Post = require('./models/Post');
 
 // Middlewares
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -36,7 +36,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Rutas
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.post('/register', async (req, res) => {
@@ -61,10 +61,9 @@ app.post('/login', async (req, res) => {
 
 app.get('/dashboard', (req, res) => {
   if (!req.session.user) return res.redirect('/');
-  res.sendFile(path.join(__dirname, 'public/dashboard.html'));
+  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// Publicar estado
 app.post('/post-status', async (req, res) => {
   if (!req.session.user) return res.redirect('/');
 
@@ -77,21 +76,22 @@ app.post('/post-status', async (req, res) => {
   res.redirect('/dashboard');
 });
 
-// Feed de publicaciones
 app.get('/api/feed', async (req, res) => {
   const posts = await Post.find().sort({ date: -1 }).limit(30);
   res.json(posts);
 });
 
-// Generador de QR único
 app.get('/api/generate-qr', async (req, res) => {
   const nickname = req.query.user || 'desconocido';
-  const qrData = `https://lascruzadas.com/perfil/${nickname}`; // puedes cambiar esto después
-  const qrImage = await QRCode.toDataURL(qrData);
-  res.json({ qr: qrImage });
+  const qrData = `https://lascruzadas.com/perfil/${nickname}`; // puedes cambiar esta URL después
+  try {
+    const qrImage = await QRCode.toDataURL(qrData);
+    res.json({ qr: qrImage });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al generar QR' });
+  }
 });
 
-// Logout
 app.get('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
