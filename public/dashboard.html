@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard - Las Cruzadas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <h1>⚔️ Las Cruzadas ⚔️</h1>
+
+  <!-- Barra de navegación -->
+  <div class="box">
+    <a href="/dashboard">🏠 Dashboard</a> |
+    <a href="/feed.html">📰 Feed</a> |
+    <a href="/eventos">📅 Eventos</a> |
+    <a href="#" onclick="mostrarQR()">📲 Mi QR</a> |
+    <a href="/logout">🚪 Cerrar sesión</a>
+  </div>
+
+  <div class="box">
+    <h2 id="nickname">Bienvenido, cruzado</h2>
+    <p>Puntos acumulados: <strong id="points">0</strong></p>
+  </div>
+
+  <div class="box">
+    <h3>Publicar estado</h3>
+    <form action="/post-status" method="POST" onsubmit="extraerEtiquetas()">
+      <textarea id="status" name="status" placeholder="¿Qué estás sintiendo hoy, cruzado?" required></textarea>
+      <input type="hidden" name="tags" id="tags">
+      <button type="submit">Publicar</button>
+    </form>
+  </div>
+
+  <script>
+    const cruzado = sessionStorage.getItem('nickname') || 'Cruzado';
+    document.getElementById('nickname').textContent = `Bienvenido, ${cruzado}`;
+
+    function mostrarQR() {
+      window.location.href = `/qr.html?user=${cruzado}`;
+    }
+
+    // Extrae etiquetas tipo @apodo y las convierte a JSON
+    function extraerEtiquetas() {
+      const texto = document.getElementById('status').value;
+      const tags = [...new Set((texto.match(/@\w+/g) || []).map(t => t.slice(1)))];
+      document.getElementById('tags').value = JSON.stringify(tags);
+    }
+
+    // Cargar puntos reales desde el backend
+    async function cargarPuntos() {
+      try {
+        const res = await fetch('/api/user');
+        const data = await res.json();
+        if (data.points !== undefined) {
+          document.getElementById('points').textContent = data.points;
+        }
+      } catch (err) {
+        console.error('Error al obtener puntos:', err);
+      }
+    }
+
+    cargarPuntos();
+  </script>
+
+</body>
+</html>
