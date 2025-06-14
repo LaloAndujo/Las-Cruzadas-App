@@ -1,4 +1,3 @@
-
 const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
@@ -22,7 +21,7 @@ const User = mongoose.model('User', new mongoose.Schema({
   nickname: String,
   password: String,
   points: { type: Number, default: 0 },
-  profilePic: { type: String, default: '' } // opcional, se puede usar más adelante
+  profilePic: { type: String, default: '' }
 }));
 const Post = require('./models/Post');
 const Event = require('./models/Event');
@@ -71,7 +70,8 @@ app.post('/post-status', async (req, res) => {
 
   const newPost = new Post({
     user: req.session.user.nickname,
-    content: req.body.status
+    content: req.body.status,
+    tags: req.body.tags ? JSON.parse(req.body.tags) : []
   });
 
   await newPost.save();
@@ -97,7 +97,7 @@ app.post('/post-status', async (req, res) => {
   res.redirect('/dashboard');
 });
 
-// Nuevo: Feed enriquecido con likes, puntos y perfil
+// Feed enriquecido con likes, puntos y perfil
 app.get('/api/feed', async (req, res) => {
   const posts = await Post.find().sort({ date: -1 }).limit(30);
   const enhancedPosts = await Promise.all(posts.map(async post => {
@@ -116,7 +116,7 @@ app.get('/api/feed', async (req, res) => {
   res.json(enhancedPosts);
 });
 
-// Nuevo: Like por post por usuario
+// Like por post por usuario
 app.post('/like/:postId', async (req, res) => {
   if (!req.session.user) return res.status(401).send('No autorizado');
 
@@ -192,12 +192,22 @@ app.post('/api/evento/asistencia', async (req, res) => {
   res.redirect(`/evento.html?id=${evento._id}`);
 });
 
+// Ruta nueva para traer puntos actualizados del usuario logueado
+app.get('/api/user', async (req, res) => {
+  if (!req.session.user) return res.status(401).send('No autorizado');
+  const user = await User.findOne({ nickname: req.session.user.nickname });
+  if (!user) return res.status(404).send('Usuario no encontrado');
+  res.json({ nickname: user.nickname, points: user.points });
+});
+
+// Logout
 app.get('/logout', (req, res) => {
   req.session.destroy(() => {
     res.redirect('/');
   });
 });
 
+// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🟢 Servidor corriendo en el puerto ${PORT}`);
 });
