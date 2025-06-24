@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Feed - Las Cruzadas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .etiqueta {
+      color: goldenrod;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🌐 Feed de Cruzados</h1>
+
+  <div class="box">
+    <a href="/dashboard">🏠 Dashboard</a> |
+    <a href="/feed.html">📰 Feed</a> |
+    <a href="#" onclick="verQR()">📲 Mi QR</a> |
+    <a href="/logout">🚪 Cerrar sesión</a>
+  </div>
+
+  <div id="rides-container"></div>
+  <div id="posts-container"></div>
+
+  <script>
+    function verQR() {
+      const cruzado = sessionStorage.getItem('nickname') || 'Cruzado';
+      window.location.href = `/qr.html?user=${cruzado}`;
+    }
+
+    async function cargarRides() {
+      const res = await fetch('/api/rides-feed');
+      const rides = await res.json();
+      const container = document.getElementById('rides-container');
+      container.innerHTML = '';
+
+      rides.forEach(ride => {
+        const div = document.createElement('div');
+        div.className = 'post';
+        div.innerHTML = `
+          <div class="user"><strong>${ride.conductor}</strong> ha registrado un ride</div>
+          <div class="date">${new Date(ride.createdAt).toLocaleString()}</div>
+          <div class="content">
+            🕓 <strong>Salida:</strong> ${ride.horarioSalida}<br>
+            📍 <strong>Punto:</strong> ${ride.puntoSalida}<br>
+            🚗 <strong>Asientos libres:</strong> ${ride.asientosLibres}<br>
+            <a href="/evento.html?id=${ride.eventoId}" style="color: #90caf9;">Ir al evento</a>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function cargarPosts() {
+      const res = await fetch('/api/feed');
+      const posts = await res.json();
+      const container = document.getElementById('posts-container');
+      container.innerHTML = '';
+
+      posts.forEach(post => {
+        const div = document.createElement('div');
+        div.className = 'post';
+        div.innerHTML = `
+          <div class="user"><strong>${post.user}</strong> (${post.points} pts)</div>
+          <div class="date">${new Date(post.date).toLocaleString()}</div>
+          <div class="content">${resaltarEtiquetas(post.content)}</div>
+          ${post.tags && post.tags.length > 0 ? `<div class="tags">Etiquetas: ${post.tags.join(', ')}</div>` : ''}
+          <div class="likes">
+            <button onclick="darLike('${post._id}', this)">❤️ ${post.likes}</button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    function resaltarEtiquetas(texto) {
+      return texto.replace(/@(\w+)/g, '<span class="etiqueta">@$1</span>');
+    }
+
+    async function darLike(postId, btn) {
+      const res = await fetch(`/like/${postId}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        btn.innerHTML = `❤️ ${data.newLikes}`;
+      } else {
+        const msg = await res.text();
+        alert(msg);
+      }
+    }
+
+    cargarRides();
+    cargarPosts();
+  </script>
+
+</body>
+</html>

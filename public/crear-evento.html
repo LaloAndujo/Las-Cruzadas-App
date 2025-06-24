@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Crear Evento - Las Cruzadas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    .navbar {
+      margin-bottom: 30px;
+    }
+
+    .navbar a {
+      margin-right: 15px;
+      text-decoration: none;
+      color: #ffeb3b;
+      font-weight: bold;
+    }
+
+    form input, form textarea {
+      background-color: #2c2c2c;
+      color: #f1f1f1;
+      border: 1px solid #555;
+    }
+
+    form button {
+      background-color: #fdd835;
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>⚔️ Crear un Nuevo Evento</h1>
+
+  <div class="navbar">
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/feed.html">📰 Feed</a>
+    <a href="/eventos">📅 Eventos</a>
+    <a href="#" onclick="verQR()">📲 Mi QR</a>
+    <a href="/logout">🚪 Cerrar sesión</a>
+  </div>
+
+  <form id="formEvento">
+    <input type="text" name="nombre" placeholder="Nombre del evento" required>
+    <textarea name="descripcion" placeholder="Descripción del evento" required></textarea>
+    <input type="text" name="ubicacion" placeholder="Lugar del evento" required>
+    <label for="fecha">Fecha y hora:</label>
+    <input type="datetime-local" name="fecha" required>
+    <button type="submit">Crear evento</button>
+  </form>
+
+  <script>
+    function verQR() {
+      const cruzado = sessionStorage.getItem('nickname') || 'Cruzado';
+      window.location.href = `/qr.html?user=${cruzado}`;
+    }
+
+    document.getElementById('formEvento').onsubmit = async e => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      const res = await fetch('/api/crear-evento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (res.ok) {
+        alert('✅ Evento creado con éxito');
+        window.location.href = '/eventos';
+      } else {
+        const error = await res.text();
+        alert('❌ Error al crear evento: ' + error);
+      }
+    };
+  </script>
+
+</body>
+</html>

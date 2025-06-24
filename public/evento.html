@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Detalle del Evento - Las Cruzadas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    .navbar a {
+      margin-right: 15px;
+      text-decoration: none;
+      color: #007bff;
+      font-weight: bold;
+    }
+    .evento {
+      border: 1px solid #ccc;
+      padding: 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
+    .ride-card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    .ride-card button {
+      margin: 3px;
+      padding: 5px 10px;
+      border: none;
+      border-radius: 4px;
+    }
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 320px;
+      position: relative;
+      text-align: center;
+    }
+    .close {
+      color: #aaa;
+      position: absolute;
+      right: 10px;
+      top: 5px;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    /* Estilo para la selección de asientos */
+    .car-container {
+      position: relative;
+      display: inline-block;
+    }
+    .car-image {
+      width: 300px;
+      max-width: 100%;
+      display: block;
+    }
+    .asiento-btn {
+      position: absolute;
+      width: 35px;
+      height: 35px;
+      background-color: rgba(0, 123, 255, 0.2);
+      border: 2px solid #007bff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    .asiento-btn.selected {
+      background-color: #28a745 !important;
+      border-color: #28a745;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🛡️ Detalles del Evento</h1>
+
+  <div class="navbar">
+    <a href="/dashboard">🏠 Dashboard</a>
+    <a href="/feed.html">📰 Feed</a>
+    <a href="/eventos">📅 Eventos</a>
+    <a href="#" onclick="mostrarQR()">📲 Mi QR</a>
+    <a href="/logout">🚪 Cerrar sesión</a>
+  </div>
+
+  <div id="detalle-evento" class="evento">
+    <p>Cargando evento...</p>
+  </div>
+
+  <div id="raite" class="evento" style="display:none;">
+    <h3>¿Cómo quieres asistir?</h3>
+    <button onclick="elegirModo('conductor')">🚘 Con mi carro</button>
+    <button onclick="elegirModo('pasajero')">🧍‍♂️ Como pasajero</button>
+
+    <div id="formConductor" style="display:none; margin-top: 10px;">
+      <h4>Registrar tu carro</h4>
+      <form id="formCarro">
+        <input name="eventoId" type="hidden">
+        <input name="espaciosDisponibles" placeholder="Lugares disponibles" required>
+        <input name="puntoSalida" placeholder="Punto de salida" required>
+        <input name="horarioSalida" placeholder="Hora de salida" required>
+        <button type="submit">Registrar Ride</button>
+      </form>
+    </div>
+
+    <div id="formPasajero" style="display:none; margin-top: 10px;">
+      <h4>Esperando conductores disponibles</h4>
+      <button onclick="unirseFila()">Unirme a la fila</button>
+      <div id="carrosDisponibles"></div>
+    </div>
+  </div>
+
+  <!-- Modal para selección interactiva de asiento -->
+  <div id="modalSeatSelection" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="cerrarModal()">&times;</span>
+      <h2>Seleccionar asiento</h2>
+      <div class="car-container">
+        <img src="/img/asientos.png" alt="Seleccionar asiento" class="car-image">
+        <!-- Bloqueo del asiento del conductor y botones para los asientos disponibles -->
+        <button class="asiento-btn" style="top: 32%; left: 33%;" disabled title="Conductor 🚫"></button>
+        <button class="asiento-btn" style="top: 32%; left: 60%;" onclick="seleccionarAsiento(1)" id="asiento-1" title="Copiloto"></button>
+        <button class="asiento-btn" style="top: 50%; left: 33%;" onclick="seleccionarAsiento(2)" id="asiento-2" title="Trasero izq."></button>
+        <button class="asiento-btn" style="top: 50%; left: 60%;" onclick="seleccionarAsiento(3)" id="asiento-3" title="Trasero der."></button>
+      </div>
+      <div style="margin-top: 15px;">
+        <button onclick="cancelarSeleccion()" style="background:#ccc;">Cancelar</button>
+        <button onclick="confirmarSeleccion()" style="background:#007bff; color:white;">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let eventoIdActual = "";
+    let rideSeleccionado = "";
+    let asientoSeleccionado = null;
+
+    const cruzado = sessionStorage.getItem('nickname') || 'Cruzado';
+
+    function mostrarQR() {
+      window.location.href = `/qr.html?user=${cruzado}`;
+    }
+
+    function obtenerID() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('id');
+    }
+
+    async function cargarEvento() {
+      const id = obtenerID();
+      eventoIdActual = id;
+      if (!id) {
+        document.getElementById('detalle-evento').innerHTML = '<p>Evento no especificado.</p>';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/events/${id}`);
+        const evento = await res.json();
+
+        const fecha = new Date(evento.fecha).toLocaleString('es-MX', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+
+        const pasajeros = evento.pasajeros.map(p => `🚗 ${p}`).join('<br>') || 'Sin pasajeros registrados';
+        const conductores = evento.conductores.map(c => `🚘 ${c.nickname} (${c.lugaresDisponibles} lugares) - ${c.horaSalida} en ${c.puntoReunion}`).join('<br>') || 'Sin conductores registrados';
+
+        document.getElementById('detalle-evento').innerHTML = `
+          <h2>${evento.nombre}</h2>
+          <p><strong>Fecha:</strong> ${fecha}</p>
+          <p><strong>Descripción:</strong> ${evento.descripcion}</p>
+          <p><strong>Pasajeros:</strong><br>${pasajeros}</p>
+          <p><strong>Conductores:</strong><br>${conductores}</p>
+        `;
+
+        document.querySelector('#formCarro input[name="eventoId"]').value = id;
+        document.getElementById('raite').style.display = 'block';
+      } catch (err) {
+        document.getElementById('detalle-evento').innerHTML = '<p>Error al cargar el evento.</p>';
+        console.error(err);
+      }
+    }
+
+    function elegirModo(modo) {
+      document.getElementById("formConductor").style.display = modo === 'conductor' ? 'block' : 'none';
+      document.getElementById("formPasajero").style.display = modo === 'pasajero' ? 'block' : 'none';
+    }
+
+    document.getElementById("formCarro").onsubmit = async e => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      const res = await fetch('/api/rides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const json = await res.json();
+      alert(json.mensaje);
+    };
+
+    async function unirseFila() {
+      const res = await fetch('/api/fila-pasajeros', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventoId: eventoIdActual })
+      });
+      const json = await res.json();
+      alert(json.mensaje);
+      cargarRides();
+    }
+
+    async function cargarRides() {
+      const res = await fetch(`/api/rides-disponibles/${eventoIdActual}`);
+      const rides = await res.json();
+      const contenedor = document.getElementById("carrosDisponibles");
+      contenedor.innerHTML = '';
+
+      // Mostramos un botón para cada ride que permita abrir el modal
+      rides.forEach(ride => {
+        const div = document.createElement('div');
+        div.className = 'ride-card';
+        div.innerHTML = `
+          <h4>Conductor: ${ride.conductorId.nickname}</h4>
+          <p>Salida: ${ride.horarioSalida} en ${ride.puntoSalida}</p>
+          <button onclick="mostrarModal('${ride._id}')" style="background:#007bff; color:white;">Seleccionar asiento</button>
+        `;
+        contenedor.appendChild(div);
+      });
+    }
+
+    // Funciones para el modal de selección de asiento
+    function mostrarModal(rideId) {
+      rideSeleccionado = rideId;
+      // Resetea la selección previa
+      if (asientoSeleccionado) {
+        document.getElementById(`asiento-${asientoSeleccionado}`).classList.remove('selected');
+        asientoSeleccionado = null;
+      }
+      document.getElementById("modalSeatSelection").style.display = "block";
+    }
+    function cerrarModal() {
+      document.getElementById("modalSeatSelection").style.display = "none";
+    }
+    function seleccionarAsiento(num) {
+      if (asientoSeleccionado) {
+        document.getElementById(`asiento-${asientoSeleccionado}`).classList.remove('selected');
+      }
+      asientoSeleccionado = num;
+      document.getElementById(`asiento-${num}`).classList.add('selected');
+    }
+    function cancelarSeleccion() {
+      if (asientoSeleccionado) {
+        document.getElementById(`asiento-${asientoSeleccionado}`).classList.remove('selected');
+      }
+      asientoSeleccionado = null;
+      alert("Selección cancelada");
+      cerrarModal();
+    }
+    async function confirmarSeleccion() {
+      if (!asientoSeleccionado) {
+        alert("Selecciona un asiento antes de confirmar.");
+        return;
+      }
+      const res = await fetch('/api/seleccionar-asiento', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rideId: rideSeleccionado, lugar: asientoSeleccionado })
+      });
+      const json = await res.json();
+      alert(json.mensaje);
+      cerrarModal();
+      cargarRides();
+    }
+
+    cargarEvento();
+  </script>
+
+</body>
+</html>
