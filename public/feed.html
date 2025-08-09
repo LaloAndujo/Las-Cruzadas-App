@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Feed — Las Cruzadas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    :root { --gold:#d4af37; --gold-soft:#b8962e; --bg:#0a0a0a; --panel:#121212; --muted:#9fa3a8; --text:#fff; }
+    html,body{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+    .wrap{ max-width:980px; margin:28px auto; padding:0 16px; }
+    .nav{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:18px; }
+    .brand{ font-weight:900; color:var(--gold); margin-right:auto; font-size:18px; }
+    .nav a{ color:var(--gold); text-decoration:none; font-weight:700; }
+
+    .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+
+    .card{ background:var(--panel); border:1px solid #2a2a2a; border-radius:14px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.35); }
+
+    /* Rides */
+    .ride{ border:1px solid #2a2a2a; border-radius:12px; padding:12px; margin-top:10px; }
+    .ride .hdr{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
+    .badge{ padding:2px 8px; border-radius:999px; border:1px solid #333; background:#151515; font-size:12px; color:#ddd; }
+    .badge.ok{ background:var(--gold); color:#0a0a0a; border-color:var(--gold); }
+    .muted{ color:var(--muted); font-size:13px; }
+
+    /* Posts */
+    .post{ display:grid; grid-template-columns:auto 1fr; gap:10px; padding:12px; border-bottom:1px solid #262626; }
+    .avatar{
+      width:44px; height:44px; border-radius:50%; background:#151515; border:1px solid #333; display:flex; align-items:center; justify-content:center; font-weight:900; color:var(--gold);
+      overflow:hidden;
+    }
+    .avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
+    .userline{ display:flex; gap:8px; align-items:center; }
+    .userline .name{ font-weight:800; }
+    .userline .pts{ color:var(--muted); font-size:12px; }
+    .date{ color:var(--muted); font-size:12px; margin-top:2px; }
+    .content{ margin-top:6px; line-height:1.45; }
+    .etiqueta{ color:var(--gold); font-weight:700; }
+    .actions{ margin-top:8px; }
+    .btn{ border:none; border-radius:10px; padding:8px 12px; font-weight:800; cursor:pointer; }
+    .btn-like{ background:transparent; color:var(--gold); border:1px solid var(--gold); }
+    .empty{ color:var(--muted); padding:10px 0; }
+
+    .toast{ position:fixed; left:50%; transform:translateX(-50%); bottom:24px; background:#111; border:1px solid #333; color:var(--gold); padding:10px 14px; border-radius:10px; font-weight:700; display:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav card">
+      <div class="brand">⚔️ Las Cruzadas</div>
+      <a href="/dashboard">🏠 Dashboard</a>
+      <a href="/feed.html">📰 Feed</a>
+      <a href="#" id="qrLink">📲 Mi QR</a>
+      <a href="/logout">🚪 Cerrar sesión</a>
+    </div>
+
+    <div class="grid">
+      <!-- Columna izquierda: Rides recientes -->
+      <div class="card">
+        <h3 style="margin:0 0 8px;">🚘 Rides recientes</h3>
+        <div id="rides-container" class="muted">Cargando rides…</div>
+      </div>
+
+      <!-- Columna derecha: Posts -->
+      <div class="card">
+        <h3 style="margin:0 0 8px;">📰 Publicaciones recientes</h3>
+        <div id="posts-container" class="muted">Cargando publicaciones…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Hecho</div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const nickname = sessionStorage.getItem('nickname') || 'Cruzado';
+
+    $('#qrLink').addEventListener('click', e => {
+      e.preventDefault();
+      location.href = `/qr.html?user=${encodeURIComponent(nickname)}`;
+    });
+
+    function toast(msg){
+      const t = $('#toast'); t.textContent = msg; t.style.display='block';
+      setTimeout(()=> t.style.display='none', 1500);
+    }
+
+    /* ------------------ RIDES ------------------ */
+    async function cargarRides(){
+      const cont = $('#rides-container');
+      // 1) Intentar endpoint directo (si lo agregas al server)
+      try{
+        const r = await fetch('/api/rides-feed');
+        if (r.ok){
+          const rides = await r.json();
+          return renderRides(rides);
+        }
+      } catch(_) {}
+
+      // 2) Fallback: traer eventos y consolidar rides disponibles (primeros 5)
+      try{
+        const evRes = await fetch('/api/events');
+        if(!evRes.ok) throw new Error('events fail');
+        const eventos = (await evRes.json()) || [];
+        const top = eventos.slice(0,5);
+        const buckets = await Promise.all(top.map(async ev=>{
+          const rr = await fetch(`/api/rides-disponibles/${ev._id}`);
+          if(!rr.ok) return [];
+          const arr = await rr.json();
+          return (arr||[]).map(r => ({ ...r, eventoId: ev._id, eventoNombre: ev.nombre }));
+        }));
+        const rides = buckets.flat().sort((a,b)=> new Date(b.createdAt||0)-new Date(a.createdAt||0)).slice(0,10);
+        renderRides(rides);
+      } catch(e){
+        cont.textContent = 'No hay rides por ahora.';
+      }
+    }
+
+    function renderRides(rides){
+      const cont = $('#rides-container');
+      if (!rides || !rides.length){
+        cont.innerHTML = '<div class="empty">No hay rides por ahora.</div>';
+        return;
+      }
+      cont.innerHTML = '';
+      rides.forEach(ride=>{
+        const libres = (ride.asientos||[]).filter(a=>!a.ocupadoPor).length;
+        const cap = (ride.asientos||[]).length;
+        const div = document.createElement('div');
+        div.className = 'ride';
+        div.innerHTML = `
+          <div class="hdr">
+            <div><strong>${ride.conductorId?.nickname || ride.conductor || 'Conductor'}</strong></div>
+            <span class="badge ${libres>0?'ok':''}">${libres}/${cap || ride.asientosLibres || 0} libres</span>
+          </div>
+          <div class="muted">Salida: ${ride.horarioSalida || '-'} · Punto: ${ride.puntoSalida || '-'}</div>
+          <div class="muted">Evento: <a href="/evento.html?id=${ride.eventoId}" style="color:var(--gold); text-decoration:none;">${ride.eventoNombre || 'Ver'}</a></div>
+        `;
+        cont.appendChild(div);
+      });
+    }
+
+    /* ------------------ POSTS ------------------ */
+    function escapeHtml(s){
+      return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+    function resaltarEtiquetas(texto){
+      return escapeHtml(texto).replace(/@(\w+)/g, '<span class="etiqueta">@$1</span>');
+    }
+
+    async function cargarPosts(){
+      const cont = $('#posts-container');
+      try{
+        const res = await fetch('/api/feed');
+        if(!res.ok) throw new Error('feed fail');
+        const posts = await res.json();
+        if(!posts.length){ cont.innerHTML = '<div class="empty">Aún no hay publicaciones.</div>'; return; }
+        cont.innerHTML = '';
+        posts.forEach(p=>{
+          const el = document.createElement('div');
+          el.className = 'post';
+
+          // avatar
+          let avatarHTML = '';
+          if (p.profilePic) {
+            avatarHTML = `<div class="avatar"><img src="${p.profilePic}" alt=""></div>`;
+          } else {
+            const ini = (p.user || '?').slice(0,2).toUpperCase();
+            avatarHTML = `<div class="avatar">${ini}</div>`;
+          }
+
+          el.innerHTML = `
+            ${avatarHTML}
+            <div>
+              <div class="userline">
+                <span class="name">${p.user}</span>
+                <span class="pts">· ${typeof p.points==='number' ? p.points : 0} pts</span>
+              </div>
+              <div class="date">${new Date(p.date).toLocaleString('es-MX')}</div>
+              <div class="content">${resaltarEtiquetas(p.content||'')}</div>
+              ${p.tags && p.tags.length ? `<div class="muted" style="margin-top:6px;">Etiquetas: ${p.tags.map(t=>`@${t}`).join(', ')}</div>` : ''}
+              <div class="actions">
+                <button class="btn btn-like" data-like="${p._id}">❤️ ${p.likes || 0}</button>
+              </div>
+            </div>
+          `;
+          cont.appendChild(el);
+        });
+
+        // bind likes
+        cont.querySelectorAll('[data-like]').forEach(btn=>{
+          btn.addEventListener('click', async ()=>{
+            const id = btn.getAttribute('data-like');
+            btn.disabled = true;
+            try{
+              const r = await fetch(`/like/${id}`, { method:'POST' });
+              if(r.ok){
+                const j = await r.json();
+                btn.textContent = `❤️ ${j.newLikes}`;
+              } else {
+                const txt = await r.text(); toast(txt || 'No se pudo dar like');
+              }
+            } finally {
+              btn.disabled = false;
+            }
+          });
+        });
+
+      } catch(e){
+        cont.innerHTML = '<div class="empty">Error al cargar el feed.</div>';
+      }
+    }
+
+    // Go!
+    cargarRides();
+    cargarPosts();
+  </script>
+</body>
+</html>
