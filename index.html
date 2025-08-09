@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Las Cruzadas — Canvas App</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0a0a0a;
+    color: #fff;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+                 Ubuntu, Cantarell, "Helvetica Neue", "Noto Sans", Arial, "Apple Color Emoji",
+                 "Segoe UI Emoji", "Segoe UI Symbol";
+  }
+  #app {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+  }
+  /* Hidden inputs used only to capture text and files; UI is canvas-rendered */
+  #hiddenText, #hiddenMulti {
+    position: absolute;
+    z-index: 10;
+    opacity: 0;
+    pointer-events: none;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: transparent;
+  }
+  #hiddenMulti { white-space: pre-wrap; }
+  #fileInput {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+<canvas id="app"></canvas>
+<input id="hiddenText" type="text" autocomplete="off" />
+<textarea id="hiddenMulti" rows="1" cols="1"></textarea>
+<input id="fileInput" type="file" accept="image/*" />
+<script>
+(() => {
+  const GOLD = "#d4af37";
+  const GOLD_SOFT = "#b8962e";
+  const WHITE = "#ffffff";
+  const BLACK = "#0a0a0a";
+  const GRAY = "#1a1a1a";
+  const MUTED = "#9fa3a8";
+
+  const canvas = document.getElementById("app");
+  const ctx = canvas.getContext("2d");
+  const hiddenText = document.getElementById("hiddenText");
+  const hiddenMulti = document.getElementById("hiddenMulti");
+  const fileInput = document.getElementById("fileInput");
+
+  let DPR = window.devicePixelRatio || 1;
+  let W = window.innerWidth;
+  let H = window.innerHeight;
+
+  function resize() {
+    DPR = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // Simple RNG
+  const rng = (min, max) => Math.random() * (max - min) + min;
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+  // --- Minimal State Management --- //
+  const LS_KEY = "cruzadas_canvas_state_v1";
+  const defUsers = [
+    {username: "Misa", email: "misa@example.com", avatar: null, points: 0},
+    {username: "Beto", email: "beto@example.com", avatar: null, points: 0},
+    {username: "Andrea", email: "andrea@example.com", avatar: null, points: 0},
+  ];
+
+  const sampleEvent = {
+    id: "EVT1",
+    titulo: "Torneo & Fogata",
+    fecha: "2025-08-16",
+    lugar: "Playas de Tijuana",
+    descripcion: "Noche de fogata, torneo de beer pong y convivencia. ¡Lleva chamarra!",
+    cars: [], // {owner, modelo, asientos, maletas, ocupados:[bool], reservas: [username|null]}
+    passengerQueue: [],
+    opiniones: [] // {user, calificacion 1-5, comentario}
+  };
+
+  const baseState = {
+    screen: "signup", // "signup" | "main"
+    tab: "Dashboard", // "Dashboard" | "Eventos" | "Feed" | "Opiniones" | "Perfil"
+    me: {username: "", email: "", avatar: null, points: 0},
+    users: defUsers.slice(),
+    posts: [
+      {
+        id: "p1",
+        author: "Misa",
+        text: "Bienvenidos a *Las Cruzadas*. ¡Activen notificaciones!",
+        likes: new Set(),
+        replies: []
+      }
+    ],
+    eventos: [sampleEvent],
+    activeEventId: "EVT1",
+    ui: {
+      toast: null,
+      toastUntil: 0
+    }
+  };
+
+  // Load or init
+  let state;
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    state = raw ? revive(JSON.parse(raw)) : baseState;
+  } catch {
+    state = baseState;
+  }
+
+  function persist() {
+    const clone = serialize(state);
+    localStorage.setItem(LS_KEY, JSON.stringify(clone));
+  }
+
+  function serialize(s) {
+    // Convert Sets to arrays for storage
+    const out = JSON.parse(JSON.stringify(s));
+    out.posts = s.posts.map(p => ({
+      id: p.id,
+      author: p.author,
+      text: p.text,
+      likes: Array.from(p.likes || []),
+      replies: (p.replies || []).map(r => ({author: r.author, text: r.text, when: r.when}))
+    }));
+    out.eventos = s.eventos.map(e => ({
+      id: e.id, titulo: e.titulo, fecha: e.fecha, lugar: e.lugar, descripcion: e.descripcion,
+      cars: (e.cars || []).map(c => ({
+        owner: c.owner, modelo: c.modelo, asientos: c.asientos, maletas: c.maletas,
+        ocupados: c.ocupados, reservas: c.reservas
+      })),
+      passengerQueue: (e.passengerQueue || []).slice(),
+      opiniones: (e.opiniones || []).map(o => ({user: o.user, calificacion: o.calificacion, comentario: o.comentario}))
+    }));
+    return out;
+  }
+
+  function revive(obj) {
+    obj.posts = (obj.posts || []).map(p => ({
+      id: p.id,
+      author: p.author,
+      text: p.text,
+      likes: new Set(p.likes || []),
+      replies: (p.replies || []).map(r => ({author: r.author, text: r.text, when: r.when}))
+    }));
+    return obj;
+  }
+
+  // --- UI Helpers --- //
+  function gradientBG() {
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "#0a0a0a");
+    g.addColorStop(1, "#121212");
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    // subtle gold noise / sparkles
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    for (let i = 0; i < 120; i++) {
+      ctx.fillStyle = Math.random() > 0.5 ? GOLD : GOLD_SOFT;
+      const x = rng(0, W);
+      const y = rng(0, H);
+      const r = rng(0.5, 1.6);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawCard(x, y, w, h, title=null) {
+    ctx.fillStyle = "#121212";
+    roundRect(ctx, x, y, w, h, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#2a2a2a";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (title) {
+      ctx.fillStyle = GOLD;
+      ctx.font = "700 18px system-ui, -apple-system, Segoe UI";
+      ctx.fillText(title, x + 16, y + 28);
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+  }
+
+  function button(x, y, w, h, label, variant="gold", active=false) {
+    let fill = variant === "gold" ? GOLD : (variant === "outline" ? "transparent" : GRAY);
+    ctx.save();
+    if (variant === "outline") {
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 2;
+      roundRect(ctx, x, y, w, h, 10);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = fill;
+      roundRect(ctx, x, y, w, h, 10);
+      ctx.fill();
+    }
+    ctx.fillStyle = variant === "gold" ? "#0a0a0a" : (variant === "outline" ? GOLD : WHITE);
+    ctx.font = "700 16px system-ui, -apple-system";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + w/2, y + h/2 + 1);
+    ctx.restore();
+
+    registerHit({type:"button", x, y, w, h, label, active});
+  }
+
+  function iconCircle(x, y, r, stroke=GOLD) {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function text(x, y, str, size=16, color=WHITE, bold=false) {
+    ctx.fillStyle = color;
+    ctx.font = `${bold ? "700" : "400"} ${size}px system-ui, -apple-system, Segoe UI`;
+    ctx.fillText(str, x, y);
+  }
+
+  function wrapText(str, x, y, maxW, lineH, size=16, color=WHITE, bold=false) {
+    ctx.fillStyle = color;
+    ctx.font = `${bold ? "700" : "400"} ${size}px system-ui, -apple-system`;
+    const words = str.split(" ");
+    let line = "";
+    let yy = y;
+    for (let i=0; i<words.length; i++) {
+      const test = line + words[i] + " ";
+      if (ctx.measureText(test).width > maxW && i > 0) {
+        ctx.fillText(line, x, yy);
+        line = words[i] + " ";
+        yy += lineH;
+      } else {
+        line = test;
+      }
+    }
+    if (line) ctx.fillText(line, x, yy);
+    return yy;
+  }
+
+  // --- Hit Map (for clicks) --- //
+  let hits = [];
+  function registerHit(obj) { hits.push(obj); }
+  function clearHits() { hits = []; }
+
+  function hitAt(mx, my) {
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const h = hits[i];
+      if (mx >= h.x && mx <= h.x + h.w && my >= h.y && my <= h.y + h.h) {
+        return h;
+      }
+    }
+    return null;
+  }
+
+  // --- UI Input Focus --- //
+  let focusField = null; // { kind: "text"|"multi", x,y,w,h, valueRef, placeholder }
+  function focusTextField(field) {
+    focusField = field;
+    if (!field) return;
+    if (field.kind === "text") {
+      hiddenText.style.left = (field.x) + "px";
+      hiddenText.style.top = (field.y) + "px";
+      hiddenText.value = field.valueRef.get();
+      hiddenText.focus();
+      hiddenText.setSelectionRange(hiddenText.value.length, hiddenText.value.length);
+    } else {
+      hiddenMulti.style.left = (field.x) + "px";
+      hiddenMulti.style.top = (field.y) + "px";
+      hiddenMulti.value = field.valueRef.get();
+      hiddenMulti.focus();
+      hiddenMulti.setSelectionRange(hiddenMulti.value.length, hiddenMulti.value.length);
+    }
+  }
+
+  hiddenText.addEventListener("input", () => {
+    if (focusField && focusField.kind === "text") {
+      focusField.valueRef.set(hiddenText.value);
+    }
+  });
+  hiddenText.addEventListener("blur", () => {
+    // keep value, just drop focus
+    focusField = null;
+  });
+
+  hiddenMulti.addEventListener("input", () => {
+    if (focusField && focusField.kind === "multi") {
+      focusField.valueRef.set(hiddenMulti.value);
+    }
+  });
+  hiddenMulti.addEventListener("blur", () => {
+    focusField = null;
+  });
+
+  // --- Toasts --- //
+  function toast(msg, ms=1600) {
+    state.ui.toast = msg;
+    state.ui.toastUntil = performance.now() + ms;
+  }
+
+  // --- Menu Items --- //
+  const TABS = ["Dashboard", "Eventos", "Feed", "Opiniones", "Perfil"];
+  function drawTopBar() {
+    const pad = 16;
+    const barH = 64;
+    // top bar bg
+    ctx.fillStyle = "#0d0d0d";
+    ctx.fillRect(0,0,W,barH);
+    // Logo
+    ctx.fillStyle = GOLD;
+    ctx.font = "900 22px system-ui, -apple-system";
+    ctx.fillText("⚔️  Las Cruzadas", pad, barH/2 + 8);
+
+    // Menu (tabs)
+    const gap = 12;
+    const btnW = 124;
+    let x = W - pad - (btnW + gap) * TABS.length;
+    const y = 12;
+    TABS.forEach(tab => {
+      const isActive = state.tab === tab;
+      button(x, y, btnW, 40, tab, isActive ? "gold" : "outline", isActive);
+      // Register click to change tab
+      registerHit({type:"tab", tab, x, y, w: btnW, h: 40});
+      x += btnW + gap;
+    });
+  }
+
+  // --- Screens --- //
+  // Signup/Register screen
+  const reg = {
+    username: "",
+    email: "",
+    password: "",
+  };
+
+  function drawSignup() {
+    gradientBG();
+    // Title
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = GOLD;
+    ctx.font = "900 36px system-ui, -apple-system";
+    ctx.fillText("⚔️  Las Cruzadas", W/2, 120);
+    ctx.fillStyle = WHITE;
+    ctx.font = "400 18px system-ui, -apple-system";
+    ctx.fillText("Crea tu cuenta para entrar al reino", W/2, 150);
+    ctx.restore();
+
+    const cardW = Math.min(520, W - 40);
+    const cardH = 380;
+    const cx = (W - cardW)/2;
+    const cy = (H - cardH)/2;
+
+    drawCard(cx, cy, cardW, cardH, "Registro");
+    // Fields
+    const fx = cx + 24;
+    let fy = cy + 56;
+
+    drawField(fx, fy, cardW - 48, 48, "Usuario", {
+      get: () => reg.username,
+      set: v => reg.username = v
+    });
+    fy += 64;
+    drawField(fx, fy, cardW - 48, 48, "Correo electrónico", {
+      get: () => reg.email,
+      set: v => reg.email = v
+    });
+    fy += 64;
+    drawField(fx, fy, cardW - 48, 48, "Contraseña", {
+      get: () => reg.password,
+      set: v => reg.password = v
+    }, true);
+    fy += 72;
+
+    button(cx + 24, fy, cardW - 48, 50, "Crear cuenta", "gold");
+    registerHit({type:"create_account", x: cx + 24, y: fy, w: cardW - 48, h: 50});
+    ctx.fillStyle = MUTED;
+    ctx.font = "400 14px system-ui";
+    ctx.fillText("Al crear tu cuenta aceptas el código de honor de Las Cruzadas.", cx + 24, fy + 74);
+  }
+
+  function drawField(x, y, w, h, placeholder, valueRef, password=false) {
+    ctx.save();
+    ctx.fillStyle = "#0e0e0e";
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#262626";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const v = valueRef.get();
+    ctx.fillStyle = v ? WHITE : "#777";
+    ctx.font = "400 16px system-ui";
+    const shown = password ? "•".repeat(v.length) : (v || placeholder);
+    ctx.fillText(shown || "", x + 12, y + h/2 + 6);
+    ctx.restore();
+
+    registerHit({type:"field", x, y, w, h, placeholder, valueRef, inputKind:"text"});
+  }
+
+  // --- Main Tabs --- //
+  function drawDashboard() {
+    drawTopBar();
+    const pad = 16;
+    const contentY = 80;
+    const colW = (W - pad*3)/2;
+    const cardH = 200;
+
+    // Left: Bienvenida + Puntos
+    drawCard(pad, contentY, colW, cardH, "Tu Dashboard");
+    const me = state.me;
+    // Avatar
+    const avX = pad + 20;
+    const avY = contentY + 56;
+    drawAvatarCircle(avX, avY, 36, me.avatar, me.username);
+
+    text(avX + 60, avY - 8, me.username || "Usuario", 20, WHITE, true);
+    text(avX + 60, avY + 20, me.email || "", 14, MUTED, false);
+    // Points
+    drawPill(avX + 60, avY + 44, `Puntos: ${me.points}`);
+
+    // Right: Actividad / Tips
+    drawCard(pad*2 + colW, contentY, colW, cardH, "Actividad reciente");
+    const tx = pad*2 + colW + 16;
+    const ty = contentY + 56;
+    ctx.fillStyle = WHITE;
+    ctx.font = "400 16px system-ui";
+    wrapText("• Recuerda: publicar, responder y dar “me gusta” suma puntos.\n• En Eventos, ofrece raite como Conductor para ayudar a la banda. \n• Sube tu foto de perfil en la pestaña Perfil.", tx, ty, colW - 32, 24, 16, WHITE);
+
+    // Bottom: Feed mini-preview & Evento destacado
+    const bottomY = contentY + cardH + pad;
+    const halfH = H - bottomY - pad;
+    drawCard(pad, bottomY, colW, halfH, "Tu feed (resumen)");
+    drawFeedList(pad + 12, bottomY + 50, colW - 24, halfH - 62, true);
+
+    drawCard(pad*2 + colW, bottomY, colW, halfH, "Evento destacado");
+    drawEventoDestacado(pad*2 + colW + 12, bottomY + 50, colW - 24, halfH - 62);
+  }
+
+  function drawFeedList(x, y, w, h, compact=false) {
+    const posts = state.posts;
+    let yy = y;
+    for (let i = posts.length - 1; i >= 0; i--) {
+      const p = posts[i];
+      yy = drawPostItem(x, yy, w, p, compact);
+      yy += 12;
+      if (yy > y + h - 120) break;
+    }
+    // Quick composer
+    yy += 10;
+    drawQuickComposer(x, yy, w);
+  }
+
+  function drawQuickComposer(x, y, w) {
+    const me = state.me;
+    ctx.fillStyle = WHITE;
+    ctx.font = "600 16px system-ui";
+    ctx.fillText("Publicar algo...", x, y);
+    const h = 48;
+    drawField(x, y + 10, w - 130, h, "Escribe tu estado (usa @ para etiquetar)", {
+      get: () => composer.text,
+      set: v => composer.text = v
+    });
+    button(x + w - 120, y + 10, 120, h, "Publicar", "gold");
+    registerHit({type:"publish", x: x + w - 120, y: y + 10, w: 120, h: h});
+  }
+
+  const composer = { text: "" };
+
+  function drawPostItem(x, y, w, post, compact=false) {
+    const rowH = compact ? 96 : 120;
+    ctx.save();
+    // Avatar
+    drawAvatarCircle(x+12, y+rowH/2 - 18, 22, null, post.author);
+    ctx.fillStyle = WHITE;
+    ctx.font = "700 16px system-ui";
+    ctx.fillText(post.author, x + 48, y + 22);
+
+    ctx.fillStyle = WHITE;
+    ctx.font = "400 15px system-ui";
+    wrapText(post.text, x + 48, y + 42, w - 60, 22, 15, WHITE);
+
+    // Likes & Reply
+    const likeW = 110;
+    const repW = 120;
+    const btnY = y + rowH - 42;
+    button(x + 48, btnY, likeW, 32, `❤ Me gusta (${post.likes.size || 0})`, "outline");
+    registerHit({type:"like", postId: post.id, x: x + 48, y: btnY, w: likeW, h: 32});
+
+    button(x + 48 + likeW + 8, btnY, repW, 32, "↩ Responder", "outline");
+    registerHit({type:"reply", postId: post.id, x: x + 48 + likeW + 8, y: btnY, w: repW, h: 32});
+
+    // Replies (show small)
+    let yy = btnY + 40;
+    const replies = post.replies || [];
+    if (!compact && replies.length) {
+      ctx.fillStyle = MUTED;
+      ctx.font = "600 14px system-ui";
+      ctx.fillText("Respuestas:", x + 48, yy);
+      yy += 20;
+      replies.slice(-3).forEach(r => {
+        drawAvatarCircle(x + 60, yy-6, 14, null, r.author);
+        ctx.fillStyle = GOLD;
+        ctx.font = "700 14px system-ui";
+        ctx.fillText(r.author + ":", x + 80, yy);
+        ctx.fillStyle = WHITE;
+        ctx.font = "400 14px system-ui";
+        wrapText(r.text, x + 150, yy, w - 170, 20, 14, WHITE);
+        yy += 28;
+      });
+    }
+
+    // Reply composer if active
+    if (activeReplyPostId === post.id) {
+      drawField(x + 48, yy + 4, w - 120, 40, "Escribe tu respuesta (@usuario)", {
+        get: () => replyComposer.text,
+        set: v => replyComposer.text = v
+      });
+      button(x + w - 64, yy + 4, 60, 40, "OK", "gold");
+      registerHit({type:"send_reply", postId: post.id, x: x + w - 64, y: yy + 4, w: 60, h: 40});
+      yy += 56;
+    }
+
+    ctx.restore();
+    return y + (compact ? 108 : (yy - y + 8));
+  }
+
+  let activeReplyPostId = null;
+  const replyComposer = { text: "" };
+
+  function drawEventoDestacado(x, y, w, h) {
+    const ev = getActiveEvent();
+    if (!ev) return;
+    // Title
+    ctx.fillStyle = WHITE;
+    ctx.font = "700 18px system-ui";
+    ctx.fillText(ev.titulo, x, y);
+    ctx.fillStyle = MUTED;
+    ctx.font = "400 14px system-ui";
+    ctx.fillText(`${ev.fecha} • ${ev.lugar}`, x, y + 22);
+
+    wrapText(ev.descripcion, x, y + 44, w, 22, 15);
+
+    // CTA buttons
+    const btnY = y + 96;
+    button(x, btnY, 140, 36, "Ir a Eventos", "gold");
+    registerHit({type:"goto_tab", tab:"Eventos", x, y: btnY, w: 140, h: 36});
+  }
+
+  // Eventos tab
+  const eventUI = {
+    mode: "none", // "none" | "pasajero" | "conductor"
+    conductor: {
+      modelo: "Sedán",
+      asientos: 3,
+      maletas: true
+    }
+  };
+
+  const modelos = ["Sedán","SUV","Hatchback","Pickup","Van"];
+
+  function drawEventos() {
+    drawTopBar();
+    const pad = 16;
+    const contentY = 80;
+    const ev = getActiveEvent();
+    if (!ev) return;
+
+    // Left column: event info + mode choose
+    const colW = (W - pad*3) / 2;
+    const leftH = 260;
+    drawCard(pad, contentY, colW, leftH, "Evento");
+    let xx = pad + 16, yy = contentY + 56;
+    text(xx, yy, ev.titulo, 20, WHITE, true); yy += 24;
+    text(xx, yy, `${ev.fecha} • ${ev.lugar}`, 14, MUTED); yy += 22;
+    wrapText(ev.descripcion, xx, yy, colW - 32, 22, 15, WHITE);
+
+    const chooseY = contentY + leftH + 10;
+    drawCard(pad, chooseY, colW, 120, "¿Cómo asistirás?");
+    button(pad + 16, chooseY + 50, 150, 46, "Pasajero", eventUI.mode==="pasajero"?"gold":"outline");
+    registerHit({type:"set_mode", mode:"pasajero", x: pad + 16, y: chooseY + 50, w: 150, h: 46});
+    button(pad + 16 + 160, chooseY + 50, 150, 46, "Conductor", eventUI.mode==="conductor"?"gold":"outline");
+    registerHit({type:"set_mode", mode:"conductor", x: pad + 16 + 160, y: chooseY + 50, w: 150, h: 46});
+
+    // Right column: passengers/cars
+    const rightX = pad*2 + colW;
+    const rightH = H - contentY - pad;
+    drawCard(rightX, contentY, colW, rightH, "Logística de raite");
+
+    if (eventUI.mode === "pasajero" || eventUI.mode === "none") {
+      drawPasajero(rightX + 12, contentY + 50, colW - 24, rightH - 62, ev);
+    }
+    if (eventUI.mode === "conductor") {
+      drawConductor(rightX + 12, contentY + 50, colW - 24, rightH - 62, ev);
+    }
+  }
+
+  function getActiveEvent() {
+    return state.eventos.find(e => e.id === state.activeEventId) || state.eventos[0];
+  }
+
+  function drawPasajero(x, y, w, h, ev) {
+    // Join queue
+    ctx.fillStyle = WHITE;
+    ctx.font = "700 18px system-ui";
+    ctx.fillText("Asistir como pasajero", x, y);
+    ctx.font = "400 14px system-ui";
+    const inQueue = ev.passengerQueue.includes(state.me.username);
+    const queueMsg = inQueue ? `Estás en la fila virtual (#${ev.passengerQueue.indexOf(state.me.username)+1}).`
+                             : "Únete a la fila virtual para apartar asiento.";
+    ctx.fillText(queueMsg, x, y + 22);
+
+    const btnLabel = inQueue ? "Salir de la fila" : "Unirme a la fila";
+    button(x, y + 36, 160, 36, btnLabel, inQueue ? "outline" : "gold");
+    registerHit({type:"toggle_queue", x, y: y + 36, w: 160, h: 36});
+
+    // List cars
+    let yy = y + 90;
+    ctx.fillStyle = MUTED;
+    ctx.font = "700 14px system-ui";
+    ctx.fillText("Autos disponibles", x, yy);
+    yy += 12;
+
+    const carCardH = 134;
+    ev.cars.forEach((c, idx) => {
+      // Draw card
+      const cy = yy + idx * (carCardH + 10);
+      drawCarCard(x, cy, w, carCardH, c, ev, idx, true);
+    });
+  }
+
+  function drawConductor(x, y, w, h, ev) {
+    ctx.fillStyle = WHITE;
+    ctx.font = "700 18px system-ui";
+    ctx.fillText("Registrar tu auto (Conductor)", x, y);
+    ctx.font = "400 14px system-ui";
+    ctx.fillText("Especifica tu modelo y cupos disponibles.", x, y + 20);
+
+    // Checklist
+    const boxY = y + 32;
+    // Modelo selector
+    ctx.fillStyle = MUTED;
+    ctx.font = "600 14px system-ui";
+    ctx.fillText("Modelo de auto:", x, boxY + 18);
+    let bx = x + 140;
+    modelos.forEach(m => {
+      const sel = eventUI.conductor.modelo === m;
+      button(bx, boxY, 104, 32, m, sel ? "gold" : "outline");
+      registerHit({type:"set_modelo", modelo: m, x: bx, y: boxY, w: 104, h: 32});
+      bx += 110;
+    });
+
+    // Asientos
+    const seatY = boxY + 44;
+    ctx.fillStyle = MUTED;
+    ctx.font = "600 14px system-ui";
+    ctx.fillText("Asientos disponibles:", x, seatY + 18);
+    let sx = x + 170;
+    [2,3,4,5].forEach(n => {
+      const sel = eventUI.conductor.asientos === n;
+      button(sx, seatY, 48, 32, String(n), sel ? "gold" : "outline");
+      registerHit({type:"set_asientos", n, x: sx, y: seatY, w: 48, h: 32});
+      sx += 56;
+    });
+
+    // Maletas
+    const lugY = seatY + 44;
+    ctx.fillStyle = MUTED;
+    ctx.font = "600 14px system-ui";
+    ctx.fillText("Espacio para maletas:", x, lugY + 18);
+    const yesSel = eventUI.conductor.maletas === true;
+    const noSel = eventUI.conductor.maletas === false;
+    button(x + 190, lugY, 76, 32, "Sí", yesSel ? "gold":"outline");
+    registerHit({type:"set_maletas", val: true, x: x + 190, y: lugY, w: 76, h: 32});
+    button(x + 270, lugY, 76, 32, "No", noSel ? "gold":"outline");
+    registerHit({type:"set_maletas", val: false, x: x + 270, y: lugY, w: 76, h: 32});
+
+    // Preview car + submit
+    const previewY = lugY + 56;
+    drawCarPreview(x, previewY, w - 220, 160, {
+      modelo: eventUI.conductor.modelo,
+      asientos: eventUI.conductor.asientos,
+      maletas: eventUI.conductor.maletas
+    });
+    button(x + w - 200, previewY + 56, 180, 46, "Registrar mi auto", "gold");
+    registerHit({type:"add_car", x: x + w - 200, y: previewY + 56, w: 180, h: 46});
+
+    // List own cars or all cars
+    const evY = previewY + 170;
+    ctx.fillStyle = MUTED;
+    ctx.font = "700 14px system-ui";
+    ctx.fillText("Autos registrados", x, evY);
+    const carCardH = 134;
+    let yy = evY + 8;
+    ev.cars.forEach((c, idx) => {
+      const cy = yy + idx * (carCardH + 10);
+      drawCarCard(x, cy, w, carCardH, c, ev, idx, false);
+    });
+  }
+
+  function drawCarPreview(x, y, w, h, car) {
+    // frame
+    drawCard(x, y, w, h, "Vista previa");
+    // Draw car silhouette
+    drawCarSilhouette(x + 14, y + 50, w - 28, 64, car.modelo);
+    // Seats
+    drawSeatRow(x + 14, y + 120, w - 28, car.asientos, []);
+    // Text
+    ctx.fillStyle = WHITE;
+    ctx.font = "600 14px system-ui";
+    ctx.fillText(`Modelo: ${car.modelo} • Cupos: ${car.asientos} • Maletas: ${car.maletas ? "Sí" : "No"}`, x + 14, y + 28);
+  }
+
+  function drawCarCard(x, y, w, h, car, ev, idx, passengerView) {
+    drawCard(x, y, w, h);
+    // Car image & seats
+    drawCarSilhouette(x + 12, y + 18, 220, 52, car.modelo);
+    drawSeatRow(x + 12, y + 84, 220, car.asientos, car.ocupados);
+
+    // Info
+    ctx.fillStyle = WHITE;
+    ctx.font = "700 16px system-ui";
+    ctx.fillText(`${car.modelo} • Conductor: ${car.owner}`, x + 240, y + 36);
+    ctx.fillStyle = MUTED;
+    ctx.font = "400 14px system-ui";
+    const libres = car.ocupados.filter(v => !v).length;
+    ctx.fillText(`Asientos libres: ${libres} / ${car.asientos} • Maletas: ${car.maletas ? "Sí" : "No"}`, x + 240, y + 56);
+
+    if (passengerView) {
+      const canBook = libres > 0;
+      button(x + w - 150, y + h/2 - 18, 140, 36, canBook ? "Apartar lugar" : "Lleno", canBook ? "gold":"outline");
+      registerHit({type:"reserve_seat", evId: ev.id, carIndex: idx, x: x + w - 150, y: y + h/2 - 18, w: 140, h: 36, can: canBook});
+    } else {
+      // If owner, allow release seat?
+      if (car.owner === state.me.username) {
+        button(x + w - 160, y + 12, 150, 30, "Eliminar auto", "outline");
+        registerHit({type:"remove_car", evId: ev.id, carIndex: idx, x: x + w - 160, y: y + 12, w: 150, h: 30});
+      }
+    }
+  }
+
+  function drawCarSilhouette(x, y, w, h, modelo) {
+    // Draw a stylized silhouette depending on model
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "#151515";
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    if (modelo === "Sedán") {
+      ctx.moveTo(0, h*0.7);
+      ctx.quadraticCurveTo(w*0.2, h*0.1, w*0.5, h*0.2);
+      ctx.quadraticCurveTo(w*0.8, h*0.25, w, h*0.6);
+      ctx.lineTo(w, h*0.9);
+      ctx.lineTo(0, h*0.9);
+      ctx.closePath();
+    } else if (modelo === "SUV") {
+      ctx.moveTo(0, h*0.6);
+      ctx.lineTo(w*0.2, h*0.2);
+      ctx.lineTo(w*0.65, h*0.2);
+      ctx.lineTo(w, h*0.55);
+      ctx.lineTo(w, h*0.9);
+      ctx.lineTo(0, h*0.9);
+      ctx.closePath();
+    } else if (modelo === "Hatchback") {
+      ctx.moveTo(0, h*0.7);
+      ctx.quadraticCurveTo(w*0.2, h*0.2, w*0.55, h*0.25);
+      ctx.lineTo(w*0.9, h*0.6);
+      ctx.lineTo(w*0.9, h*0.9);
+      ctx.lineTo(0, h*0.9);
+      ctx.closePath();
+    } else if (modelo === "Pickup") {
+      ctx.moveTo(0, h*0.6);
+      ctx.lineTo(w*0.4, h*0.6);
+      ctx.lineTo(w*0.55, h*0.25);
+      ctx.lineTo(w*0.9, h*0.25);
+      ctx.lineTo(w, h*0.55);
+      ctx.lineTo(w, h*0.9);
+      ctx.lineTo(0, h*0.9);
+      ctx.closePath();
+    } else if (modelo === "Van") {
+      ctx.moveTo(0, h*0.5);
+      ctx.lineTo(w*0.2, h*0.2);
+      ctx.lineTo(w*0.85, h*0.2);
+      ctx.lineTo(w, h*0.5);
+      ctx.lineTo(w, h*0.9);
+      ctx.lineTo(0, h*0.9);
+      ctx.closePath();
+    } else {
+      ctx.rect(0, 0, w, h);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // Wheels
+    ctx.beginPath();
+    ctx.arc(w*0.25, h*0.9, h*0.12, 0, Math.PI*2);
+    ctx.arc(w*0.75, h*0.9, h*0.12, 0, Math.PI*2);
+    ctx.fillStyle = "#0e0e0e";
+    ctx.fill();
+    ctx.strokeStyle = "#333";
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = GOLD;
+    ctx.font = "700 14px system-ui";
+    ctx.fillText(modelo, 6, -8);
+    ctx.restore();
+  }
+
+  function drawSeatRow(x, y, w, n, ocupados) {
+    const gap = 8;
+    const r = 10;
+    const totalW = n * (r*2) + (n-1)*gap;
+    let sx = x + (w - totalW)/2;
+    for (let i=0; i<n; i++) {
+      const taken = ocupados && ocupados[i];
+      ctx.beginPath();
+      ctx.arc(sx + r, y, r, 0, Math.PI*2);
+      ctx.fillStyle = taken ? "#4a4a4a" : GOLD;
+      ctx.fill();
+      ctx.strokeStyle = "#222";
+      ctx.stroke();
+      sx += r*2 + gap;
+    }
+  }
+
+  // Feed tab (full)
+  function drawFeed() {
+    drawTopBar();
+    const pad = 16;
+    const contentY = 80;
+    drawCard(pad, contentY, W - pad*2, H - contentY - pad, "Feed de Las Cruzadas");
+    drawFeedList(pad + 12, contentY + 50, W - pad*2 - 24, H - contentY - pad - 62, false);
+  }
+
+  // Opiniones tab
+  const opinionComposer = { calificacion: 5, comentario: "" };
+
+  function drawOpiniones() {
+    drawTopBar();
+    const pad = 16;
+    const contentY = 80;
+    const colW = (W - pad*3) / 2;
+    drawCard(pad, contentY, colW, H - contentY - pad, "Da tu opinión del evento");
+    const ev = getActiveEvent();
+
+    // Form
+    let x = pad + 16;
+    let y = contentY + 56;
+    text(x, y, "Evento:", 16, MUTED, true);
+    text(x + 80, y, `${ev.titulo} • ${ev.fecha}`, 16, WHITE);
+    y += 30;
+    text(x, y, "Calificación:", 16, MUTED, true);
+    drawStars(x + 110, y - 12, opinionComposer.calificacion);
+    // star hits
+    for (let i=1; i<=5; i++) {
+      registerHit({type:"set_stars", n: i, x: x + 110 + (i-1)*26, y: y - 24, w: 24, h: 24});
+    }
+    y += 36;
+    drawMultilineField(x, y, colW - 32, 120, "Escribe tu comentario...", {
+      get: () => opinionComposer.comentario,
+      set: v => opinionComposer.comentario = v
+    });
+    y += 140;
+    button(x, y, 180, 46, "Enviar opinión", "gold");
+    registerHit({type:"send_opinion", x, y, w: 180, h: 46});
+
+    // Right: list opinions
+    drawCard(pad*2 + colW, contentY, colW, H - contentY - pad, "Opiniones recientes");
+    let xx = pad*2 + colW + 16;
+    let yy = contentY + 56;
+    (ev.opiniones || []).slice(-10).reverse().forEach(op => {
+      drawAvatarCircle(xx, yy-6, 12, null, op.user);
+      text(xx + 24, yy, op.user, 14, GOLD, true);
+      drawStars(xx + 120, yy - 12, op.calificacion);
+      yy += 18;
+      wrapText(op.comentario, xx + 24, yy, colW - 40, 20, 14, WHITE);
+      yy += 36;
+    });
+  }
+
+  function drawStars(x, y, n) {
+    for (let i=1; i<=5; i++) {
+      starIcon(x + (i-1)*26, y, 10, i <= n ? GOLD : "#3c3c3c");
+    }
+  }
+
+  function starIcon(cx, cy, r, color) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    for (let i=0; i<5; i++) {
+      const ang1 = (i * 72 - 90) * Math.PI/180;
+      const ang2 = ((i + 0.5) * 72 - 90) * Math.PI/180;
+      ctx.lineTo(Math.cos(ang1)*r, Math.sin(ang1)*r);
+      ctx.lineTo(Math.cos(ang2)*(r/2), Math.sin(ang2)*(r/2));
+    }
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMultilineField(x, y, w, h, placeholder, valueRef) {
+    ctx.save();
+    ctx.fillStyle = "#0e0e0e";
+    roundRect(ctx, x, y, w, h, 10);
+    ctx.fill();
+    ctx.strokeStyle = "#262626";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const v = valueRef.get();
+    ctx.fillStyle = v ? WHITE : "#777";
+    ctx.font = "400 15px system-ui";
+    const shown = v || placeholder;
+    wrapText(shown, x + 12, y + 20, w - 24, 22, 15, v ? WHITE : "#777");
+    ctx.restore();
+    registerHit({type:"field", x, y, w, h, placeholder, valueRef, inputKind:"multi"});
+  }
+
+  // Perfil tab
+  function drawPerfil() {
+    drawTopBar();
+    const pad = 16;
+    const contentY = 80;
+    const cardW = Math.min(720, W - pad*2);
+    drawCard((W - cardW)/2, contentY, cardW, H - contentY - pad, "Tu perfil");
+    const x = (W - cardW)/2 + 16;
+    let y = contentY + 56;
+    // Avatar
+    drawAvatarCircle(x + 40, y + 40, 40, state.me.avatar, state.me.username);
+    button(x + 96, y + 20, 170, 38, "Subir foto de perfil", "outline");
+    registerHit({type:"upload_avatar", x: x + 96, y: y + 20, w: 170, h: 38});
+    y += 100;
+
+    // Data
+    drawField(x, y, cardW - 32, 48, "Usuario", {
+      get: () => state.me.username,
+      set: v => { state.me.username = v; persist(); }
+    });
+    y += 64;
+    drawField(x, y, cardW - 32, 48, "Correo", {
+      get: () => state.me.email,
+      set: v => { state.me.email = v; persist(); }
+    });
+    y += 64;
+    drawPill(x, y + 44, `Puntos actuales: ${state.me.points}`);
+
+    // Logout
+    button(x, y + 88, 160, 42, "Cerrar sesión", "outline");
+    registerHit({type:"logout", x, y: y + 88, w: 160, h: 42});
+  }
+
+  function drawAvatarCircle(x, y, r, avatarImg, username) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.closePath();
+    ctx.fillStyle = "#0f0f0f";
+    ctx.fill();
+    ctx.strokeStyle = "#2a2a2a";
+    ctx.stroke();
+    if (avatarImg) {
+      // draw image fitted
+      try {
+        ctx.save();
+        ctx.clip();
+        const iw = avatarImg.width;
+        const ih = avatarImg.height;
+        const scale = Math.max((r*2)/iw, (r*2)/ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        ctx.drawImage(avatarImg, x - dw/2, y - dh/2, dw, dh);
+        ctx.restore();
+      } catch {}
+    } else {
+      // initials
+      const initials = (username || "U").slice(0,2).toUpperCase();
+      ctx.fillStyle = GOLD;
+      ctx.font = "700 16px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(initials, x, y);
+    }
+    ctx.restore();
+  }
+
+  function drawPill(x, y, label) {
+    const w = ctx.measureText(label).width + 24;
+    ctx.fillStyle = GOLD;
+    roundRect(ctx, x, y, w, 28, 14);
+    ctx.fill();
+    ctx.fillStyle = "#0a0a0a";
+    ctx.font = "700 14px system-ui";
+    ctx.fillText(label, x + 12, y + 19);
+  }
+
+  // --- Interaction: clicks --- //
+  canvas.addEventListener("mousedown", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = hitAt(mx, my);
+    if (!hit) {
+      focusTextField(null);
+      return;
+    }
+    if (hit.type === "field") {
+      focusTextField({
+        kind: hit.inputKind === "multi" ? "multi" : "text",
+        x: hit.x, y: hit.y, w: hit.w, h: hit.h,
+        valueRef: hit.valueRef, placeholder: hit.placeholder
+      });
+      return;
+    }
+    if (hit.type === "button") {
+      // No-op; most buttons have their own specific hit types registered after drawing
+      return;
+    }
+    // Tab change
+    if (hit.type === "tab") {
+      state.tab = hit.tab;
+      if (state.tab === "Feed") activeReplyPostId = null;
+      persist();
+      return;
+    }
+    if (hit.type === "goto_tab") {
+      state.tab = hit.tab;
+      persist();
+      return;
+    }
+    if (hit.type === "create_account") {
+      if (!reg.username || !reg.email || !reg.password) {
+        toast("Completa todos los campos");
+        return;
+      }
+      state.me = {username: reg.username, email: reg.email, avatar: null, points: 0};
+      // if username not in users, add
+      if (!state.users.some(u => u.username === reg.username)) {
+        state.users.push({username: reg.username, email: reg.email, avatar: null, points: 0});
+      }
+      state.screen = "main";
+      toast("Cuenta creada. ¡Bienvenido!");
+      persist();
+      return;
+    }
+    if (hit.type === "publish") {
+      const txt = (composer.text || "").trim();
+      if (!txt) return;
+      const post = {
+        id: "p" + Date.now(),
+        author: state.me.username || "Tú",
+        text: txt,
+        likes: new Set(),
+        replies: []
+      };
+      state.posts.push(post);
+      const tagged = extractTags(txt);
+      let pts = 10 + (tagged.size ? 2 * tagged.size : 0);
+      addPoints(pts);
+      composer.text = "";
+      toast(`Publicado (+${pts} pts)`);
+      persist();
+      return;
+    }
+    if (hit.type === "like") {
+      const p = state.posts.find(pp => pp.id === hit.postId);
+      if (!p) return;
+      if (!p.likes.has(state.me.username)) {
+        p.likes.add(state.me.username);
+        addPoints(1);
+        toast("Te gustó (+1 pt)");
+      } else {
+        p.likes.delete(state.me.username);
+      }
+      persist();
+      return;
+    }
+    if (hit.type === "reply") {
+      activeReplyPostId = hit.postId;
+      replyComposer.text = "";
+      persist();
+      return;
+    }
+    if (hit.type === "send_reply") {
+      if (activeReplyPostId !== hit.postId) return;
+      const post = state.posts.find(p => p.id === hit.postId);
+      if (!post) return;
+      const txt = (replyComposer.text || "").trim();
+      if (!txt) return;
+      post.replies.push({author: state.me.username || "Tú", text: txt, when: new Date().toISOString()});
+      activeReplyPostId = null;
+      const tagged = extractTags(txt);
+      let pts = 3 + (tagged.size ? 2 * tagged.size : 0);
+      addPoints(pts);
+      toast(`Respondido (+${pts} pts)`);
+      persist();
+      return;
+    }
+    if (hit.type === "set_mode") {
+      eventUI.mode = hit.mode;
+      persist();
+      return;
+    }
+    if (hit.type === "toggle_queue") {
+      const ev = getActiveEvent();
+      const u = state.me.username;
+      const i = ev.passengerQueue.indexOf(u);
+      if (i === -1) {
+        ev.passengerQueue.push(u);
+        toast("Te uniste a la fila virtual");
+      } else {
+        ev.passengerQueue.splice(i,1);
+        toast("Saliste de la fila");
+      }
+      persist();
+      return;
+    }
+    if (hit.type === "set_modelo") {
+      eventUI.conductor.modelo = hit.modelo;
+      persist();
+      return;
+    }
+    if (hit.type === "set_asientos") {
+      eventUI.conductor.asientos = hit.n;
+      persist();
+      return;
+    }
+    if (hit.type === "set_maletas") {
+      eventUI.conductor.maletas = hit.val;
+      persist();
+      return;
+    }
+    if (hit.type === "add_car") {
+      const ev = getActiveEvent();
+      const c = {
+        owner: state.me.username,
+        modelo: eventUI.conductor.modelo,
+        asientos: eventUI.conductor.asientos,
+        maletas: eventUI.conductor.maletas,
+        ocupados: Array(eventUI.conductor.asientos).fill(false),
+        reservas: Array(eventUI.conductor.asientos).fill(null)
+      };
+      ev.cars.push(c);
+      toast("Auto registrado (+5 pts)");
+      addPoints(5);
+      persist();
+      return;
+    }
+    if (hit.type === "remove_car") {
+      const ev = getActiveEvent();
+      ev.cars.splice(hit.carIndex, 1);
+      toast("Auto eliminado");
+      persist();
+      return;
+    }
+    if (hit.type === "reserve_seat") {
+      if (!hit.can) return;
+      const ev = getActiveEvent();
+      const c = ev.cars[hit.carIndex];
+      const slot = c.ocupados.indexOf(false);
+      if (slot === -1) return;
+      c.ocupados[slot] = true;
+      c.reservas[slot] = state.me.username;
+      // If user was in queue, remove
+      const qi = ev.passengerQueue.indexOf(state.me.username);
+      if (qi !== -1) ev.passengerQueue.splice(qi, 1);
+      toast("Asiento apartado (+2 pts)");
+      addPoints(2);
+      persist();
+      return;
+    }
+    if (hit.type === "set_stars") {
+      opinionComposer.calificacion = hit.n;
+      persist();
+      return;
+    }
+    if (hit.type === "send_opinion") {
+      const ev = getActiveEvent();
+      const comentario = (opinionComposer.comentario || "").trim();
+      if (!comentario) { toast("Escribe un comentario"); return; }
+      ev.opiniones.push({user: state.me.username, calificacion: opinionComposer.calificacion, comentario});
+      toast("Gracias por tu opinión (+1 pt)");
+      addPoints(1);
+      opinionComposer.calificacion = 5;
+      opinionComposer.comentario = "";
+      persist();
+      return;
+    }
+    if (hit.type === "upload_avatar") {
+      triggerFileUpload();
+      return;
+    }
+    if (hit.type === "logout") {
+      state.screen = "signup";
+      persist();
+      return;
+    }
+  });
+
+  function addPoints(n) {
+    state.me.points = (state.me.points || 0) + n;
+  }
+
+  function extractTags(txt) {
+    const set = new Set();
+    (txt.match(/@\w+/g) || []).forEach(t => set.add(t.slice(1)));
+    return set;
+  }
+
+  function triggerFileUpload() {
+    fileInput.value = "";
+    // temporarily enable it to click
+    fileInput.style.pointerEvents = "auto";
+    fileInput.click();
+    // disable again shortly
+    setTimeout(() => { fileInput.style.pointerEvents = "none"; }, 0);
+  }
+
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        state.me.avatar = img;
+        persist();
+        toast("Foto de perfil actualizada");
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+
+  // --- Main Render Loop --- //
+  function render() {
+    clearHits();
+    gradientBG();
+    if (state.screen === "signup") {
+      drawSignup();
+    } else {
+      if (state.tab === "Dashboard") drawDashboard();
+      else if (state.tab === "Eventos") drawEventos();
+      else if (state.tab === "Feed") drawFeed();
+      else if (state.tab === "Opiniones") drawOpiniones();
+      else if (state.tab === "Perfil") drawPerfil();
+    }
+
+    // Toast
+    if (state.ui.toast && performance.now() < state.ui.toastUntil) {
+      const msg = state.ui.toast;
+      const w = Math.min(420, W - 60);
+      const x = (W - w) / 2;
+      const y = H - 90;
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = "#111";
+      roundRect(ctx, x, y, w, 48, 12);
+      ctx.fill();
+      ctx.strokeStyle = "#333";
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = GOLD;
+      ctx.font = "700 16px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(msg, W/2, y + 30);
+      ctx.textAlign = "left";
+    } else if (performance.now() >= state.ui.toastUntil) {
+      state.ui.toast = null;
+    }
+
+    requestAnimationFrame(render);
+  }
+  render();
+
+})();</script>
+</body>
+</html>
