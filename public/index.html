@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Las Cruzadas — Inicio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    :root { --gold:#d4af37; --bg:#0a0a0a; --panel:#121212; --muted:#9fa3a8; --text:#fff; }
+    html,body{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+    .wrap{ min-height:100dvh; display:grid; place-items:center; padding:24px; }
+    .brand{ text-align:center; margin-bottom:14px; }
+    .brand h1{ margin:0; font-size:32px; font-weight:900; color:var(--gold); letter-spacing:.5px; }
+    .grid{ width:min(980px,94vw); display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media (max-width:840px){ .grid{ grid-template-columns:1fr; } }
+
+    .card{ background:var(--panel); border:1px solid #2a2a2a; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+    .title{ margin:0 0 10px; font-size:20px; font-weight:900; color:#fff; }
+    label{ display:block; font-size:14px; color:#ddd; font-weight:600; margin:8px 0 6px; }
+    input{ width:100%; height:48px; border-radius:12px; border:1px solid #2a2a2a; background:#0e0e0e; color:#fff; padding:0 12px; font-size:16px; outline:none; }
+    .row{ display:flex; gap:10px; align-items:center; }
+    .hint{ color:var(--muted); font-size:12px; margin-top:6px; }
+    .btn{ width:100%; height:48px; border:none; border-radius:12px; background:var(--gold); color:#0a0a0a; font-weight:900; font-size:16px; cursor:pointer; margin-top:12px; }
+    .btn[disabled]{ opacity:.7; cursor:not-allowed; }
+    .toggle{ background:transparent; color:#bbb; border:1px solid #333; border-radius:10px; padding:8px 10px; font-weight:700; cursor:pointer; }
+    .error{ color:#ff8a80; font-size:13px; margin-top:8px; min-height:18px; }
+    .ok{ color:#9be38b; font-size:13px; margin-top:8px; min-height:18px; }
+    .links{ display:flex; justify-content:space-between; gap:10px; margin-top:10px; }
+    .link{ color:var(--gold); text-decoration:none; font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <h1>⚔️ Las Cruzadas ⚔️</h1>
+    </div>
+
+    <div class="grid">
+      <!-- Login -->
+      <div class="card">
+        <h2 class="title">Iniciar sesión</h2>
+        <form id="loginForm" action="/login" method="POST">
+          <label for="login-nickname">Apodo</label>
+          <input type="text" id="login-nickname" name="nickname" placeholder="Tu apodo" required autocomplete="username" />
+          <label for="login-pass">Contraseña</label>
+          <div class="row">
+            <input type="password" id="login-pass" name="password" placeholder="********" required autocomplete="current-password" />
+            <button type="button" class="toggle" data-toggle="#login-pass">Mostrar</button>
+          </div>
+          <button class="btn" id="loginBtn" type="submit">Entrar</button>
+          <div id="loginMsg" class="error"></div>
+          <div class="links">
+            <a class="link" href="/feed.html">Ver feed</a>
+            <a class="link" href="/eventos">Ver eventos</a>
+          </div>
+        </form>
+      </div>
+
+      <!-- Registro -->
+      <div class="card">
+        <h2 class="title">Registrarse</h2>
+        <form id="regForm" action="/register" method="POST">
+          <label for="register-nickname">Nuevo apodo</label>
+          <input type="text" id="register-nickname" name="nickname" placeholder="Elige un apodo" required maxlength="30" />
+          <label for="register-pass">Crear contraseña</label>
+          <div class="row">
+            <input type="password" id="register-pass" name="password" placeholder="Mín. 6 caracteres" required minlength="6" autocomplete="new-password" />
+            <button type="button" class="toggle" data-toggle="#register-pass">Mostrar</button>
+          </div>
+          <div class="hint">Tip: usa 6+ caracteres y evita datos obvios.</div>
+          <button class="btn" id="regBtn" type="submit">Unirme</button>
+          <div id="regMsg" class="error"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+
+    // Guardar nickname en sessionStorage (como en tu versión)
+    function hookSaveNickname(form){
+      form.addEventListener('submit', ()=>{
+        const nick = form.querySelector('input[name="nickname"]')?.value?.trim();
+        if (nick) sessionStorage.setItem('nickname', nick);
+        const btn = form.querySelector('button[type="submit"]');
+        if (btn){ btn.disabled = true; btn.textContent = 'Enviando…'; }
+      });
+    }
+    hookSaveNickname($('#loginForm'));
+    hookSaveNickname($('#regForm'));
+
+    // Mostrar/ocultar contraseña
+    document.querySelectorAll('.toggle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const sel = btn.getAttribute('data-toggle');
+        const input = document.querySelector(sel);
+        if (!input) return;
+        input.type = input.type === 'password' ? 'text' : 'password';
+        btn.textContent = input.type === 'password' ? 'Mostrar' : 'Ocultar';
+      });
+    });
+
+    // Validaciones rápidas (cliente)
+    $('#regForm').addEventListener('submit', (e)=>{
+      const nick = $('#register-nickname').value.trim();
+      const pass = $('#register-pass').value;
+      const msg = $('#regMsg');
+      msg.textContent = '';
+      if (nick.length < 3){ e.preventDefault(); msg.textContent = 'El apodo debe tener al menos 3 caracteres.'; $('#regBtn').disabled = false; $('#regBtn').textContent = 'Unirme'; }
+      else if (pass.length < 6){ e.preventDefault(); msg.textContent = 'La contraseña debe tener al menos 6 caracteres.'; $('#regBtn').disabled = false; $('#regBtn').textContent = 'Unirme'; }
+    });
+
+    // Si el server devuelve un error plano (caso login/registro viejos), mostrarlo si viene en la URL (?error=...)
+    const params = new URLSearchParams(location.search);
+    const err = params.get('error');
+    if (err){ $('#loginMsg').textContent = decodeURIComponent(err); }
+  </script>
+</body>
+</html>
