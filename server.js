@@ -47,7 +47,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 /* ===== Rutas ===== */
 app.use(require('./routes/auth'));    // /login, /register, /logout (+ alias)
-app.use(require('./routes/user'));    // /api/user, /api/user/qr, /api/generate-qr
+app.use(require('./routes/User'));    // /api/user, /api/user/qr, /api/generate-qr
 app.use(require('./routes/posts'));   // /api/posts (+ like JSON)
 app.use(require('./routes/feed'));    // compat: /post-status, /api/feed, /like/:id, delete post
 app.use(require('./routes/events'));  // /api/events... crear/asistencia/borrar
