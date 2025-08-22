@@ -1,0 +1,28 @@
+body {
+  font-family: system-ui, sans-serif;
+  background: #111;
+  color: #eee;
+  margin: 20px;
+}
+
+h1 {
+  color: gold;
+}
+
+form {
+  margin-bottom: 20px;
+}
+
+input, textarea, button {
+  margin: 4px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+
+button {
+  background: gold;
+  color: #111;
+  font-weight: bold;
+  cursor: pointer;
+}
