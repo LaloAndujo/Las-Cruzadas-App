@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard — Las Cruzadas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>⚔️ Bienvenido, Cruzado</h1>
+
+  <section>
+    <h2>Tu QR</h2>
+    <img id="qr" src="" alt="QR de usuario">
+  </section>
+
+  <section>
+    <h2>Feed</h2>
+    <form id="postForm">
+      <textarea name="content" placeholder="¿Qué piensas?" required></textarea>
+      <button type="submit">Publicar</button>
+    </form>
+    <div id="feed"></div>
+  </section>
+
+  <script>
+    async function cargarFeed(){
+      const res = await fetch('/posts');
+      const posts = await res.json();
+      document.getElementById('feed').innerHTML = posts.map(p =>
+        `<div><b>${p.user}</b>: ${p.content} <i>(${p.likes} likes)</i>
+         <button onclick="likePost('${p._id}')">❤️</button></div>`).join('');
+    }
+
+    async function likePost(id){
+      await fetch(`/posts/${id}/like`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nickname:"Tester"})});
+      cargarFeed();
+    }
+
+    document.getElementById('postForm').onsubmit = async e => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      data.user = "Tester"; // aquí usa el nickname real de sesión
+      await fetch('/posts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+      e.target.reset();
+      cargarFeed();
+    };
+
+    cargarFeed();
+  </script>
+</body>
+</html>
