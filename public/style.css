@@ -1,0 +1,127 @@
+:root{
+  --gold:#d4af37; --gold-soft:#b8962e;
+  --bg:#0a0a0a; --panel:#111213; --muted:#9fa3a8; --text:#fff;
+  --border:#242424; --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+html,body{ margin:0; background:var(--bg); color:var(--text); font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+button,input,textarea{ font-family:inherit; }
+
+/* Top bar */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 14px; background:rgba(10,10,10,.85); backdrop-filter: blur(8px);
+  border-bottom:1px solid #171717;
+}
+.brand{ font-weight:900; color:var(--gold); letter-spacing:.4px; font-size:18px; }
+.topbtn{ background:#161616; color:#ddd; border:1px solid #2a2a2a; border-radius:10px; padding:8px 10px; }
+
+/* Container */
+.container{ padding:14px 12px 96px; max-width:760px; margin:0 auto; }
+
+/* Cards & panels */
+.card{
+  background:var(--panel); border:1px solid var(--border); border-radius:16px; padding:14px; box-shadow:var(--shadow); margin-bottom:14px;
+}
+.card.inset{ background:#0e0e0f; border:1px solid #1e1e1f; }
+.title{ margin:0 0 8px; color:#fff; font-size:20px; font-weight:900; }
+.title.sm{ font-size:16px; }
+.hero{ margin:4px 0 8px; font-size:26px; font-weight:900; color:var(--gold); }
+.muted{ color:var(--muted); } .tiny{ font-size:12px; } .center{ text-align:center; }
+
+.pill{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:var(--gold); color:#000; font-weight:900; }
+
+/* Forms */
+.form label{ display:block; font-size:13px; color:#ddd; font-weight:700; margin:8px 0 6px; }
+input, textarea{
+  width:100%; border:1px solid #2a2a2a; background:#0e0e0e; color:#fff; border-radius:12px; padding:12px; font-size:16px; outline:none;
+  transition:border-color .2s ease, box-shadow .2s ease;
+}
+input:focus, textarea:focus{ border-color:#3a3a3a; box-shadow:0 0 0 3px rgba(212,175,55,.15); }
+textarea{ min-height:110px; resize:vertical; }
+.row{ display:flex; gap:8px; align-items:center; }
+.row.space{ justify-content:space-between; }
+.grid1{ display:grid; } .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.gap{ gap:10px; }
+
+/* Buttons */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  border:none; border-radius:12px; padding:12px 14px; font-weight:900; cursor:pointer;
+  background:#1a1a1a; color:#fff; border:1px solid #2a2a2a;
+  transition:transform .12s ease, box-shadow .2s ease, background .2s;
+}
+.btn:hover{ transform:translateY(-1px); box-shadow:0 6px 16px rgba(0,0,0,.25); }
+.btn:active{ transform:translateY(0); }
+.btn-primary{ background:var(--gold); color:#0a0a0a; border:none; }
+.btn-outline{ background:transparent; color:var(--gold); border:1px solid var(--gold); }
+.btn-lg{ padding:14px 16px; font-size:16px; }
+.btn-block{ width:100%; }
+.btn.small{ padding:8px 10px; font-weight:800; }
+.toggle{ background:#161616; color:#bbb; border:1px solid #333; border-radius:10px; padding:8px 10px; }
+
+/* Composer */
+.composer{ position:relative; }
+.tags{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.tag{ border:1px solid #333; color:#ddd; padding:4px 8px; border-radius:999px; font-size:12px; }
+
+/* Feed */
+.feed .post{ margin-bottom:10px; }
+.post-head{ display:flex; align-items:center; gap:10px; }
+.avatar{ width:40px; height:40px; border-radius:10px; display:grid; place-items:center; background:#151515; border:1px solid #2a2a2a; font-weight:900; color:var(--gold); }
+.nick{ font-weight:900; }
+.grow{ flex:1 }
+.post-body{ margin:8px 2px; line-height:1.35; word-wrap:break-word; }
+.post-actions{ display:flex; gap:8px; align-items:center; }
+.icon{ background:#171717; border:1px solid #2a2a2a; border-radius:10px; padding:6px 8px; cursor:pointer; }
+.icon.danger{ color:#ff9b9b; border-color:#3a2323; }
+
+/* Eventos & Raites */
+.cards{ display:grid; grid-template-columns:1fr; gap:10px; }
+.ev-title{ font-weight:900; font-size:18px; color:#fff; }
+.seats{ display:flex; gap:6px; margin-top:6px; }
+.seat{ width:16px; height:16px; border-radius:4px; border:1px solid #333; background:#151515; box-shadow: inset 0 0 0 2px rgba(255,255,255,.03); }
+.seat.taken{ background:linear-gradient(180deg,#444,#222); border-color:#444; }
+
+.mt6{ margin-top:6px; } .mt8{ margin-top:8px; }
+
+/* Toast */
+.toast{
+  position:fixed; left:50%; transform:translateX(-50%) translateY(12px);
+  bottom:80px; background:#111; border:1px solid #333; color:#fff;
+  padding:10px 14px; border-radius:10px; font-weight:800;
+  opacity:0; pointer-events:none; transition:all .2s ease; z-index:60;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* Tabs inferiores (mobile-first) */
+.tabs{
+  position:fixed; bottom:0; left:0; right:0; z-index:50;
+  display:grid; grid-template-columns:1fr 1fr auto 1fr 1fr; align-items:center;
+  gap:8px; padding:10px 12px env(safe-area-inset-bottom);
+  background:rgba(10,10,10,.88); backdrop-filter: blur(10px); border-top:1px solid #171717;
+}
+.tab{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  background:#141414; color:#ddd; border:1px solid #222; border-radius:14px;
+  padding:8px 6px; font-weight:800; font-size:18px; min-height:48px;
+}
+.tab span{ font-size:11px; color:#aaa; font-weight:700; }
+.tab.active{ border-color:var(--gold); color:var(--gold); }
+.tab.fab{
+  width:64px; height:64px; border-radius:50%; justify-self:center;
+  font-size:28px; background:var(--gold); color:#000; border:none; box-shadow:0 10px 24px rgba(212,175,55,.35);
+}
+
+/* QR */
+.qrbox{ margin-top:10px; display:flex; align-items:center; justify-content:center; padding:10px; border:1px dashed #333; border-radius:12px; }
+.qrbox img{ max-width:220px; display:block; }
+
+/* Desktop improvements */
+@media (min-width: 900px){
+  .container{ padding-bottom:40px; }
+  .tabs{ display:none; }
+  .cards{ grid-template-columns:repeat(2,minmax(260px,1fr)); }
+  .grid2{ grid-template-columns:1fr 1fr; }
+}
