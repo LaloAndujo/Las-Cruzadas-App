@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Eventos — Las Cruzadas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>📅 Eventos</h1>
+
+  <form id="eventForm">
+    <input name="title" placeholder="Título" required>
+    <textarea name="description" placeholder="Descripción"></textarea>
+    <input type="date" name="date" required>
+    <button type="submit">Crear</button>
+  </form>
+
+  <div id="eventList"></div>
+
+  <script>
+    async function cargarEventos(){
+      const res = await fetch('/events');
+      const events = await res.json();
+      document.getElementById('eventList').innerHTML = events.map(e =>
+        `<div><b>${e.title}</b> - ${e.date}
+         <button onclick="joinEvent('${e._id}')">Unirme</button></div>`).join('');
+    }
+
+    async function joinEvent(id){
+      await fetch(`/events/${id}/join`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({nickname:"Tester"})});
+      cargarEventos();
+    }
+
+    document.getElementById('eventForm').onsubmit = async e => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      data.creator = "Tester";
+      await fetch('/events', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+      e.target.reset();
+      cargarEventos();
+    };
+
+    cargarEventos();
+  </script>
+</body>
+</html>
