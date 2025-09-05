@@ -8,7 +8,7 @@ const path = require('path');
 const QRCode = require('qrcode');
 const cors = require('cors');
 
-// ➕ NUEVO: para subir/procesar avatares
+// ➕ Subida/procesado de avatares
 const fs = require('fs');
 const multer = require('multer');
 const sharp = require('sharp');
@@ -28,7 +28,7 @@ mongoose.connect(MONGO_URI, { autoIndex: true })
 ======================= */
 const User = require('./models/User');
 
-// Post / Event / Ride inline (para mantener 4 archivos totales)
+// Post / Event / Ride inline
 const postSchema = new mongoose.Schema({
   user: String,
   content: String,
@@ -76,7 +76,7 @@ app.set('trust proxy', 1);
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// CORS opcional (si sirves front en otro dominio)
+// CORS opcional
 const allowed = (process.env.ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
 if (allowed.length) app.use(cors({ origin: allowed, credentials: true }));
 
@@ -103,7 +103,7 @@ app.use(session({
 // Static
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ➕ NUEVO: estáticos para /uploads (avatars)
+// ➕ Estáticos para /uploads (avatars)
 const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
 const AVATARS_ROOT = path.join(UPLOADS_DIR, 'avatars');
 if (!fs.existsSync(AVATARS_ROOT)) fs.mkdirSync(AVATARS_ROOT, { recursive: true });
@@ -220,15 +220,24 @@ app.get('/api/generate-qr', async (req, res) => {
 });
 
 /* =======================
-   ➕ AVATAR (UPLOAD)
+   AVATAR (UPLOAD)
 ======================= */
-// multer en memoria (sharp escribe el archivo final)
+// ⬆️ 20 MB, acepta HEIC/HEIF de iPhone
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 3 * 1024 * 1024 }, // 3 MB
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
   fileFilter: (req, file, cb) => {
-    const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.mimetype);
-    if (!ok) return cb(new Error('Solo JPG, PNG, WEBP o AVIF'));
+    const okTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/avif',
+      'image/heic',
+      'image/heif'
+    ];
+    if (!okTypes.includes(file.mimetype)) {
+      return cb(new Error('Solo imágenes: JPG, PNG, WEBP, AVIF o HEIC/HEIF'));
+    }
     cb(null, true);
   },
 });
@@ -249,9 +258,9 @@ app.post('/api/profile/avatar', isAuth, upload.single('avatar'), async (req, res
 
     const outPath = path.join(userDir, 'avatar.webp');
     await sharp(req.file.buffer)
-      .rotate()
-      .resize(512, 512, { fit: 'cover' })
-      .webp({ quality: 88 })
+      .rotate()                                   // respeta EXIF
+      .resize(512, 512, { fit: 'cover' })         // cuadrado exacto
+      .webp({ quality: 88 })                      // calidad alta/ligera
       .toFile(outPath);
 
     const publicUrl = `/uploads/avatars/${userId}/avatar.webp`;
@@ -277,7 +286,6 @@ app.post('/api/posts', isAuth, async (req, res) => {
     const me = await getUserLite(req.session.userId);
     const post = await Post.create({ user: me.nickname, content, image, tags, likes: 0, likedBy: [] });
 
-    // puntos por publicar (API JSON)
     await addPoints(me._id, 10);
     res.json(post);
   } catch { res.status(500).send('Error creando post'); }
@@ -344,7 +352,10 @@ app.post('/post-status', isAuth, async (req, res) => {
 app.get('/api/feed', isAuth, async (_req, res) => {
   const posts = await Post.find().sort({ createdAt: -1 }).limit(30).lean();
   const nicks = [...new Set(posts.map(p => p.user))];
-  const users = await User.find({ nickname: { $in: nicks } }, { nickname: 1, points: 1, profilePic: 1, avatarUpdatedAt: 1 }).lean();
+  const users = await User.find(
+    { nickname: { $in: nicks } },
+    { nickname: 1, points: 1, profilePic: 1, avatarUpdatedAt: 1 }
+  ).lean();
   const byNick = new Map(users.map(u => [u.nickname, u]));
   const enhanced = posts.map(p => {
     const u = byNick.get(p.user);
