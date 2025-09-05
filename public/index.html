@@ -62,7 +62,7 @@
         <span class="pill">Puntos: <span id="points">0</span></span>
       </div>
 
-      <!-- ➕ NUEVO: Mi Perfil (avatar) -->
+      <!-- Mi Perfil (avatar) -->
       <div class="card inset">
         <h3 class="title sm">Mi Perfil</h3>
         <div class="row" style="align-items:center; gap:12px;">
@@ -90,7 +90,7 @@
         </div>
       </div>
 
-      <!-- Composer fijo mobile -->
+      <!-- Composer -->
       <div class="composer card inset">
         <h3 class="title sm">Publicar estado</h3>
         <form id="postForm">
@@ -211,14 +211,13 @@ async function loadUser(){
     $('#nickTitle').textContent = `Bienvenido, ${u.nickname || 'Cruzado'}`;
     $('#points').textContent = typeof u.points === 'number' ? u.points : 0;
 
-    // Avatar del dashboard (si no hay, muestra placeholder con inicial)
+    // Avatar del dashboard (si no hay, placeholder con inicial)
     const avatarImg = $('#avatarImg');
     if (u.profilePic) {
       const v = u.avatarUpdatedAt ? new Date(u.avatarUpdatedAt).getTime() : Date.now();
       avatarImg.src = `${u.profilePic}?v=${v}`;
       avatarImg.alt = u.nickname || 'Avatar';
     } else {
-      // placeholder transparente con inicial
       avatarImg.src = `data:image/svg+xml;utf8,${encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72"><rect width="100%" height="100%" rx="12" ry="12" fill="#151515"/><text x="50%" y="55%" font-size="28" font-family="Inter,Arial" text-anchor="middle" fill="#d4af37" font-weight="900">'+
         (u.nickname?u.nickname[0].toUpperCase():'C')+
@@ -266,7 +265,7 @@ $('#copyProfile').onclick = async ()=>{
   try { await navigator.clipboard.writeText(url); toast('Enlace copiado'); } catch { toast('Copia manual: '+url); }
 };
 
-/* ➕ NUEVO: AVATAR (front) */
+/* AVATAR (front) — límite local 20 MB */
 const avatarInput = document.getElementById('avatarInput');
 const previewBtn = document.getElementById('previewBtn');
 const previewWrap = document.getElementById('previewWrap');
@@ -288,7 +287,7 @@ avatarForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const file = avatarInput?.files?.[0];
   if (!file) { avatarMsg.textContent = 'Selecciona una imagen.'; return; }
-  if (file.size > 3 * 1024 * 1024) { avatarMsg.textContent = 'Máximo 3 MB.'; return; }
+  if (file.size > 20 * 1024 * 1024) { avatarMsg.textContent = 'Máximo 20 MB.'; return; }
 
   const fd = new FormData(); fd.append('avatar', file);
   avatarMsg.textContent = 'Subiendo...';
@@ -300,8 +299,6 @@ avatarForm?.addEventListener('submit', async (e) => {
     avatarImg.src = `${data.profilePic}?v=${v}`;
     avatarMsg.textContent = '¡Avatar actualizado!';
     previewWrap.hidden = true;
-
-    // Refresca currentUser (para que tenga profilePic nuevo)
     try { await loadUser(); } catch {}
   } catch (err) {
     console.error(err);
@@ -334,7 +331,6 @@ async function loadFeed(){
     const card = document.createElement('article'); card.className='post card inset';
     const isMine = currentUser && currentUser.nickname === p.user;
 
-    // avatar preferentemente con imagen
     let avatarHTML = '';
     if (p.profilePic) {
       const v = p.avatarUpdatedAt ? new Date(p.avatarUpdatedAt).getTime() : Date.now();
