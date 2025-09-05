@@ -8,6 +8,11 @@ const path = require('path');
 const QRCode = require('qrcode');
 const cors = require('cors');
 
+// ➕ NUEVO: para subir/procesar avatares
+const fs = require('fs');
+const multer = require('multer');
+const sharp = require('sharp');
+
 const app = express();
 
 /* =======================
@@ -97,6 +102,17 @@ app.use(session({
 
 // Static
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ➕ NUEVO: estáticos para /uploads (avatars)
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+const AVATARS_ROOT = path.join(UPLOADS_DIR, 'avatars');
+if (!fs.existsSync(AVATARS_ROOT)) fs.mkdirSync(AVATARS_ROOT, { recursive: true });
+
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  },
+}));
 
 /* =======================
    HELPERS
@@ -204,6 +220,55 @@ app.get('/api/generate-qr', async (req, res) => {
 });
 
 /* =======================
+   ➕ AVATAR (UPLOAD)
+======================= */
+// multer en memoria (sharp escribe el archivo final)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 3 * 1024 * 1024 }, // 3 MB
+  fileFilter: (req, file, cb) => {
+    const ok = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.mimetype);
+    if (!ok) return cb(new Error('Solo JPG, PNG, WEBP o AVIF'));
+    cb(null, true);
+  },
+});
+
+// POST /api/profile/avatar  (form-data: avatar=<file>)
+app.post('/api/profile/avatar', isAuth, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No recibí archivo' });
+
+    const userId = String(req.session.userId);
+    const userDir = path.join(AVATARS_ROOT, userId);
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true });
+
+    // Limpia anteriores
+    for (const f of (fs.readdirSync(userDir) || [])) {
+      try { fs.unlinkSync(path.join(userDir, f)); } catch {}
+    }
+
+    const outPath = path.join(userDir, 'avatar.webp');
+    await sharp(req.file.buffer)
+      .rotate()
+      .resize(512, 512, { fit: 'cover' })
+      .webp({ quality: 88 })
+      .toFile(outPath);
+
+    const publicUrl = `/uploads/avatars/${userId}/avatar.webp`;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    user.profilePic = publicUrl;
+    user.avatarUpdatedAt = new Date();
+    await user.save();
+
+    res.json({ ok: true, profilePic: publicUrl, avatarUpdatedAt: user.avatarUpdatedAt });
+  } catch (e) {
+    console.error('Error subiendo avatar:', e);
+    res.status(500).json({ error: 'Error subiendo avatar' });
+  }
+});
+
+/* =======================
    POSTS + FEED
 ======================= */
 app.post('/api/posts', isAuth, async (req, res) => {
@@ -279,11 +344,16 @@ app.post('/post-status', isAuth, async (req, res) => {
 app.get('/api/feed', isAuth, async (_req, res) => {
   const posts = await Post.find().sort({ createdAt: -1 }).limit(30).lean();
   const nicks = [...new Set(posts.map(p => p.user))];
-  const users = await User.find({ nickname: { $in: nicks } }, { nickname: 1, points: 1, profilePic: 1 }).lean();
+  const users = await User.find({ nickname: { $in: nicks } }, { nickname: 1, points: 1, profilePic: 1, avatarUpdatedAt: 1 }).lean();
   const byNick = new Map(users.map(u => [u.nickname, u]));
   const enhanced = posts.map(p => {
     const u = byNick.get(p.user);
-    return { ...p, points: u?.points ?? 0, profilePic: u?.profilePic ?? null };
+    return {
+      ...p,
+      points: u?.points ?? 0,
+      profilePic: u?.profilePic ?? null,
+      avatarUpdatedAt: u?.avatarUpdatedAt ?? null
+    };
   });
   res.json(enhanced);
 });
