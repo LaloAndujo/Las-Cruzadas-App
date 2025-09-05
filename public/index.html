@@ -56,57 +56,66 @@
     </section>
 
     <!-- DASHBOARD -->
-    <section id="view-dashboard" class="card" hidden>
-      <h1 class="hero" id="nickTitle">Bienvenido, cruzado</h1>
-      <div class="meta">
-        <span class="pill">Puntos: <span id="points">0</span></span>
-      </div>
+<section id="view-dashboard" class="card" hidden>
+  <h1 class="hero" id="nickTitle">Hola, cruzado</h1>
+  <div class="meta">
+    <span class="pill">Puntos: <span id="points">0</span></span>
+  </div>
 
-      <!-- Mi Perfil (avatar) -->
-      <div class="card inset">
-        <h3 class="title sm">Mi Perfil</h3>
-        <div class="row" style="align-items:center; gap:12px;">
-          <img id="avatarImg" class="avatar" alt="Avatar" style="width:72px;height:72px;border-radius:12px;object-fit:cover;border:1px solid #2a2a2a;" />
-          <form id="avatarForm" enctype="multipart/form-data" class="form" style="flex:1;">
-            <input type="file" id="avatarInput" name="avatar" accept="image/*" />
-            <div class="row mt6">
-              <button type="button" class="btn" id="previewBtn">Previsualizar</button>
-              <button type="submit" class="btn btn-primary">Guardar</button>
-            </div>
-            <small id="avatarMsg" class="muted tiny"></small>
-          </form>
-        </div>
-        <div id="previewWrap" class="mt6" hidden>
-          <strong class="tiny">Previsualización:</strong><br>
-          <img id="previewImg" class="avatar" alt="Preview" style="width:72px;height:72px;border-radius:12px;object-fit:cover;border:1px dashed #444;" />
-        </div>
-      </div>
+  <!-- Perfil -->
+  <div class="card inset profile-v2">
+    <h3 class="title sm">Mi Perfil</h3>
 
-      <div class="grid1 gap">
-        <button class="btn btn-outline btn-block" id="copyProfile">📲 Copiar enlace de perfil</button>
-        <button class="btn btn-outline btn-block" id="showQR">🧾 Ver mi QR</button>
-        <div class="qrbox" id="qrBox" hidden>
-          <img id="qrImg" alt="QR" />
+    <div class="profile-grid">
+      <!-- Foto grande al centro -->
+      <img id="avatarImg" class="avatar-xxl" alt="Avatar" />
+
+      <!-- Formulario -->
+      <form id="avatarForm" enctype="multipart/form-data" class="form">
+        <label class="tiny muted">Selecciona una imagen</label>
+        <input type="file" id="avatarInput" name="avatar" accept="image/*" />
+        <div class="row mt6">
+          <button type="button" class="btn btn-ghost btn-xs" id="previewBtn">Previsualizar</button>
+          <button type="submit" class="btn btn-primary btn-xs">Guardar</button>
+        </div>
+        <small id="avatarMsg" class="muted tiny"></small>
+      </form>
+
+      <!-- Acciones al costado -->
+      <div class="profile-side">
+        <button class="btn btn-outline btn-xs" id="copyProfile">📲 Copiar enlace</button>
+        <button class="btn btn-outline btn-xs" id="showQR">🧾 Ver QR</button>
+      </div>
+    </div>
+
+    <!-- Preview y QR (debajo) -->
+    <div id="previewWrap" class="mt6" hidden>
+      <strong class="tiny">Previsualización:</strong><br>
+      <img id="previewImg" class="avatar-xxl" alt="Preview" />
+    </div>
+
+    <div class="qrbox mt6" id="qrBox" hidden>
+      <img id="qrImg" alt="QR" />
+    </div>
+  </div>
+
+  <!-- Publicar estado (tarjeta aparte) -->
+  <div class="composer card inset">
+    <h3 class="title sm">Publicar estado</h3>
+    <form id="postForm">
+      <textarea id="status" name="status" placeholder="¿Qué sientes hoy? Usa @apodo para etiquetar." maxlength="1000" required></textarea>
+      <input type="hidden" name="tags" id="tags" />
+      <div class="tags" id="tagsPreview"></div>
+      <div class="row space">
+        <span class="muted tiny" id="charCount">0/1000</span>
+        <div class="row">
+          <button class="btn btn-ghost" type="button" id="clearBtn">Limpiar</button>
+          <button class="btn btn-primary" type="submit" id="postBtn">Publicar</button>
         </div>
       </div>
-
-      <!-- Composer -->
-      <div class="composer card inset">
-        <h3 class="title sm">Publicar estado</h3>
-        <form id="postForm">
-          <textarea id="status" name="status" placeholder="¿Qué sientes hoy? Usa @apodo para etiquetar." maxlength="1000" required></textarea>
-          <input type="hidden" name="tags" id="tags" />
-          <div class="tags" id="tagsPreview"></div>
-          <div class="row space">
-            <span class="muted tiny" id="charCount">0/1000</span>
-            <div class="row">
-              <button class="btn" type="button" id="clearBtn">Limpiar</button>
-              <button class="btn btn-primary" type="submit" id="postBtn">Publicar</button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </section>
+    </form>
+  </div>
+</section>
 
     <!-- FEED -->
     <section id="view-feed" class="card" hidden>
