@@ -1,5 +1,6 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -15,17 +16,15 @@ const PORT = process.env.PORT || 8000;
 // --- Middlewares ---
 app.use(express.json());
 
-// CORS (si backend y frontend van en el mismo servicio, puedes quitarlo sin problema)
+// CORS (si backend y frontend van en el mismo servicio puedes quitarlo)
 const allowed = (process.env.CORS_ORIGINS || 'http://localhost:3000')
   .split(',')
   .map(s => s.trim());
-app.use(cors({
-  origin: allowed,
-  credentials: true
-}));
+app.use(cors({ origin: allowed, credentials: true }));
 
 // --- DB Connection ---
-mongoose.connect(process.env.MONGO_URI, {})
+mongoose
+  .connect(process.env.MONGO_URI, {})
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB error:', err));
 
@@ -44,7 +43,7 @@ const auth = async (req, res, next) => {
     if (!user) return res.status(401).json({ detail: 'Invalid token' });
     req.user = user;
     next();
-  } catch (e) {
+  } catch {
     return res.status(401).json({ detail: 'Invalid token' });
   }
 };
@@ -228,11 +227,7 @@ app.post('/api/posts/:postId/like', auth, async (req, res) => {
 
     await post.save();
 
-    res.json({
-      action,
-      like_count: post.likes.length,
-      points_awarded
-    });
+    res.json({ action, like_count: post.likes.length, points_awarded });
   } catch (err) {
     console.error(err);
     res.status(500).json({ detail: 'Server error' });
@@ -261,12 +256,23 @@ app.get('/api/leaderboard', async (_req, res) => {
 });
 
 // --- Servir el frontend (Vite build) ---
-const distPath = path.join(__dirname, '..', 'frontend', 'dist');
-app.use(express.static(distPath));
-// Cualquier ruta que NO sea /api/* la atiende el frontend
-app.get(/^\/(?!api).*/, (_req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
-});
+// soporta 'frontend/dist' y 'Frontend/dist'
+const candidates = [
+  path.resolve(__dirname, '../frontend/dist'),
+  path.resolve(__dirname, '../Frontend/dist'),
+];
+const FRONTEND_DIR = candidates.find(p => fs.existsSync(p));
+
+if (FRONTEND_DIR) {
+  console.log('🧱 Serving static from:', FRONTEND_DIR);
+  app.use(express.static(FRONTEND_DIR));
+  // Cualquier ruta no-API la atiende el frontend
+  app.get(/^\/(?!api).*/, (_req, res) => {
+    res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
+  });
+} else {
+  console.warn('⚠️ No se encontró el build del frontend (dist).');
+}
 
 // Start
 app.listen(PORT, () => {
