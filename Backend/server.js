@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -14,7 +15,7 @@ const PORT = process.env.PORT || 8000;
 // --- Middlewares ---
 app.use(express.json());
 
-// CORS
+// CORS (si backend y frontend van en el mismo servicio, puedes quitarlo sin problema)
 const allowed = (process.env.CORS_ORIGINS || 'http://localhost:3000')
   .split(',')
   .map(s => s.trim());
@@ -24,7 +25,7 @@ app.use(cors({
 }));
 
 // --- DB Connection ---
-mongoose.connect(process.env.MONGO_URI, { })
+mongoose.connect(process.env.MONGO_URI, {})
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB error:', err));
 
@@ -60,8 +61,11 @@ const awardPoints = async (userId, action, points, description) => {
   return record;
 };
 
-// --- Routes ---
-app.get('/', (_req, res) => res.send('🚀 Las Cruzadas Backend Running'));
+// --- Healthcheck simple ---
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// --- Routes (API) ---
+app.get('/api', (_req, res) => res.send('🚀 Las Cruzadas API Running'));
 
 // AUTH: Register
 app.post('/api/auth/register', async (req, res) => {
@@ -150,7 +154,6 @@ app.post('/api/posts', auth, async (req, res) => {
 
     await awardPoints(req.user._id, 'post', 10, 'Publicación en el feed');
 
-    // populate minimal user data for response
     const response = {
       id: post._id,
       user_id: String(req.user._id),
@@ -191,7 +194,7 @@ app.get('/api/posts', auth, async (_req, res) => {
       likes: p.likes.map(String),
       like_count: p.likes.length,
       created_at: p.createdAt,
-      is_liked: false // el frontend calcula según user actual si quieres
+      is_liked: false
     }));
 
     res.json(mapped);
@@ -215,11 +218,9 @@ app.post('/api/posts/:postId/like', auth, async (req, res) => {
     let points_awarded = 0;
 
     if (hasLiked) {
-      // unlike
       post.likes = post.likes.filter(u => String(u) !== uid);
       action = 'unlike';
     } else {
-      // like
       post.likes.push(req.user._id);
       const rec = await awardPoints(req.user._id, 'like', 2, 'Like en publicación');
       points_awarded = rec.points;
@@ -257,6 +258,14 @@ app.get('/api/leaderboard', async (_req, res) => {
     console.error(err);
     res.status(500).json({ detail: 'Server error' });
   }
+});
+
+// --- Servir el frontend (Vite build) ---
+const distPath = path.join(__dirname, '..', 'frontend', 'dist');
+app.use(express.static(distPath));
+// Cualquier ruta que NO sea /api/* la atiende el frontend
+app.get(/^\/(?!api).*/, (_req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'));
 });
 
 // Start
